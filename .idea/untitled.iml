@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="EMPTY_MODULE" version="4">
+  <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/jagex/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/js5/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/cache/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/constants/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/io/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/engine/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/login/src" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/src/jagex/target" />
+      <excludeFolder url="file://$MODULE_DIR$/src/js5/target" />
+      <excludeFolder url="file://$MODULE_DIR$/target" />
+      <excludeFolder url="file://$MODULE_DIR$/src/cache/target" />
+      <excludeFolder url="file://$MODULE_DIR$/src/constants/target" />
+      <excludeFolder url="file://$MODULE_DIR$/src/io/target" />
+      <excludeFolder url="file://$MODULE_DIR$/src/engine/target" />
+      <excludeFolder url="file://$MODULE_DIR$/src/login/target" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>
