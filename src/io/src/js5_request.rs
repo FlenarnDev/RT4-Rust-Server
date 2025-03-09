@@ -42,7 +42,7 @@ impl Js5Request {
                 connection.output.p1(0);
                 connection.output.p4(request_data.len() as i32);
 
-                connection.output.pdata(&request_data, request_data.len());
+                connection.output.pbytes(&request_data, request_data.len());
             } else {
                 request_data = cache.store.read(*archive, *group as u32).expect("Failed to read archive & group.");
                 if *archive != ARCHIVESET {
@@ -64,7 +64,7 @@ impl Js5Request {
                 debug!("Compression: {}", compression);
                 debug!("Size: {}", size);
                 debug!("Urgent: {}", *urgent);
-                request_packet.pdata(&request_data, length as usize);
+                request_packet.pbytes(&request_data, length as usize);
 
                 connection.output = request_packet;
             }

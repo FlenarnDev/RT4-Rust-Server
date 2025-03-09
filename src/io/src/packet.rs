@@ -140,7 +140,7 @@ impl Packet {
     }
 
     #[inline(always)]
-    pub fn pdata(&mut self, src: &Vec<u8>, length: usize) {
+    pub fn pbytes(&mut self, src: &Vec<u8>, length: usize) {
         for i in 0..length
         {
             self.data.push(src[i]);
@@ -288,11 +288,13 @@ impl Packet {
     }
 
     #[inline(always)]
-    pub fn gdata(&mut self, dest: &mut Vec<u8>, offset: usize, length: usize) {
-        let pos: usize = self.position;
-        unsafe { dest.get_unchecked_mut(offset..offset + length) }
-            .copy_from_slice(unsafe { &self.data.get_unchecked(pos..pos + length) });
+    pub fn gbytes(&mut self, length: usize) -> Vec<u8> {
+        let mut result = Vec::with_capacity(length);
+        for i in 0..length {
+            result.push(self.data[self.position + i]);
+        }
         self.position += length;
+        result
     }
 
     /// Sets the internal bit position (`bit_pos`) to the current byte position (`pos`)

@@ -1,3 +1,4 @@
+use std::io::repeat;
 use std::sync::Arc;
 use std::time::Duration;
 use std::net::SocketAddr;
@@ -120,9 +121,7 @@ impl Connection {
                 let client_version = self.input.g4();
                 info!("Client version is {}", client_version);
 
-                self.output = Packet::from(vec![]);
-
-                if client_version == 531 {
+                if client_version == 530 {
                     self.output.p1(js5_out::SUCCESS);
                     self.state = ClientState::Js5;
                 } else {
@@ -159,7 +158,7 @@ impl Connection {
 
         self.output.p1(0);
 
-        let session_key = 56468456468454;
+        let session_key = 56468456468454; // TODO - actual rng implementation
         self.output.p8(session_key.clone());
         self.state = ClientState::Login_Secondary;
         self.handle_data_flush().await;
@@ -170,11 +169,42 @@ impl Connection {
         let opcode = self.input.g1();
         debug!("Received opcode is {}", opcode);
 
-        if opcode == 16 || opcode == 18 {
+        if opcode != 16 && opcode != 18 {
+            self.output.p1(22); // TODO - Const this
+            self.handle_data_flush().await;
+            self.state = ClientState::Closed;
+            return
+        }
+
+        let length = self.input.g2();
+        let client_version = self.input.g4();
+
+        if client_version != 530 {
             self.output.p1(6);
             self.handle_data_flush().await;
             self.state = ClientState::Closed;
+            return
         }
+
+        let byte1 = self.input.g1s();
+        let adverts_suppressed = self.input.g1s();
+        let byte2 = self.input.g1s();
+        let window_mode = self.input.g1s();
+        let canvas_width = self.input.g2();
+        let canvas_height = self.input.g2();
+        let anti_aliasing = self.input.g1s();
+        let uid = self.input.gbytes(24);
+        let client_settings = self.input.gjstr(0);
+        let affiliate = self.input.g4();
+        let preferences = self.input.g4();
+
+        let client_verify_id = self.input.g2();
+
+        let mut checksums = Vec::new();
+        for _ in 0..28 {
+            checksums.push(self.input.g4());
+        }
+
     }
 
     async fn handle_worldlist_fetch(&mut self) {
@@ -223,7 +253,7 @@ impl Connection {
         ];
 
         self.output.p2(response.data.len() as i32);
-        self.output.pdata(&temp, response.data.len());
+        self.output.pbytes(&temp, response.data.len());
 
         self.handle_data_flush().await;
     }
