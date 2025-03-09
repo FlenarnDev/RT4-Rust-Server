@@ -1,8 +1,7 @@
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpStream;
 use tokio::io::{Result, AsyncReadExt, AsyncWriteExt, copy};
 use std::net::SocketAddr;
 use log::{debug, error, info};
-use tokio::io;
 use constants::js5_out::js5_out;
 use constants::title_protocol::title_protocol;
 use crate::packet::Packet;
@@ -18,12 +17,24 @@ pub struct Connection {
     pub peer_addr: SocketAddr,
 }
 
+/// Writes the output packet data of the connection to the socket and clears the packet.
+///
+/// This function checks if the output packet contains any data. If it does, it writes the data to the
+/// connection's socket, flushes the socket to ensure the data is sent immediately, and then clears
+/// the packet's data. This helps to reset the output packet for further use after the data is sent.
+///
+/// Logs a debug message after successfully writing and clearing the output.
+///
+/// # Arguments
+/// - `conn`: A mutable reference to the `Connection` whose output packet needs to be written.
+///
+/// # Returns
+/// A Result indicating success or failure of the I/O operations.
 pub async fn write_and_clear_output(conn: &mut Connection) -> Result<()> {
     if !conn.output.data.is_empty() {
         conn.socket.write_all(&conn.output.data).await?;
         conn.socket.flush().await?;
         conn.output.data.clear(); // Clear the output packet after writing
-        debug!("Output packet written and cleared");
     }
     Ok(())
 }
@@ -67,13 +78,29 @@ pub async fn handle_connection(mut conn: Connection) -> Result<()> {
             }
             ClientState::JS5 => {
                 let target_addr = "127.0.0.1:43595".parse::<SocketAddr>().unwrap();
-                let target_stream = TcpStream::connect(target_addr).await?;
-                conn.state = ClientState::PROXYING(target_stream);
+                match TcpStream::connect(target_addr).await {
+                    Ok(target_stream) => {
+                        target_stream.set_nodelay(true)?;
+                        conn.state = ClientState::PROXYING(target_stream);
+                    },
+                    Err(e) => {
+                        debug!("Failed to connect to JS5 server: {:?}", e);
+                        conn.state = ClientState::CLOSED;
+                    }
+                }
             }
             ClientState::WORLDLIST => {
                 let target_addr = "127.0.0.1:43596".parse::<SocketAddr>().unwrap();
-                let target_stream = TcpStream::connect(target_addr).await?;
-                conn.state = ClientState::PROXYING(target_stream);
+                match TcpStream::connect(target_addr).await {
+                    Ok(target_stream) => {
+                        target_stream.set_nodelay(true)?;
+                        conn.state = ClientState::PROXYING(target_stream);
+                    },
+                    Err(e) => {
+                        debug!("Failed to connect to worldlist server: {:?}", e);
+                        conn.state = ClientState::CLOSED;
+                    }
+                }
             }
 
             ClientState::PROXYING(ref mut target_stream) => {

@@ -54,21 +54,11 @@ async fn process(connection: &mut Connection) -> std::io::Result<()> {
     response.psmart(1);
     response.p2(20);
     
-    // TODO - pjstr2 is fucked? writing temp data
-    debug!("worldlist data: {:?}", response.data);
-    debug!("worldlist data length: {:?}", response.data.len());
-
-    let temp = vec![
-        1, 1, 1, 128, 191, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 40, 1, 0, 20
-    ];
-    debug!("worldlist data length: {:?}", temp.len());
-
-    connection.output.p2(temp.len() as i32);
-    connection.output.pbytes(&temp, 0, temp.len());
+    connection.output.p2(response.data.len() as i32);
+    connection.output.pbytes(&response.data, 0, response.data.len());
 
     write_and_clear_output(connection).await?;
     connection.state = ClientState::CLOSED;
-    
     Ok(())
 }
 
@@ -105,6 +95,5 @@ pub async fn worldlist_server() -> std::io::Result<()> {
             }
         });
     }
-    
     Ok(())
 }

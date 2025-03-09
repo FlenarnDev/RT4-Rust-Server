@@ -1,4 +1,3 @@
-use std::path::Path;
 use std::sync::OnceLock;
 use log::{debug, error};
 use rs2cache::Cache;
@@ -11,7 +10,6 @@ pub fn init() {
     debug!("Initializing cacheLocal from ./src/cacheLocal");
     let cache = match Cache::open("./src/cacheLocal") {
         Ok(cache) => {
-            debug!("Archive count: {:?}", cache.archives.len());
             cache
         },
         Err(e) => {

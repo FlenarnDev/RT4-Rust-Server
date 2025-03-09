@@ -6,9 +6,7 @@ pub struct Packet {
 }
 
 impl Packet {
-
     /// Create a 'Packet' with a fixed sized allocated buffer.
-    /// This 'Packet' will default to use byte mode.
     pub fn new(size: usize) -> Packet {
         Packet {
             data: Vec::with_capacity(size),
@@ -19,7 +17,6 @@ impl Packet {
 
     /// Create a new 'Packet' from a 'Vec<u8>' array.
     /// This will take ownership of the input vector.
-    /// This 'Packet' will be default use byte mode.
     pub fn from(data: Vec<u8>) -> Packet {
         Packet {
             data,
@@ -29,7 +26,6 @@ impl Packet {
     }
 
     /// Create a new 'Packet' from an input file from IO.
-    /// This 'Packet' will default to use byte mode.
     pub fn io(path: String) -> Packet {
         Packet::from(std::fs::read(path).unwrap())
     }
@@ -56,7 +52,7 @@ impl Packet {
     #[inline(always)]
     pub fn p2(&mut self, value: i32) {
         let truncated_value = value as u16;
-        self.data.extend_from_slice(&truncated_value.to_be_bytes());  // Append two bytes (big-endian)
+        self.data.extend_from_slice(&truncated_value.to_be_bytes());
         self.position += 2;
     }
 
@@ -79,7 +75,7 @@ impl Packet {
 
     #[inline(always)]
     pub fn p4(&mut self, value: i32) {
-        self.data.extend_from_slice(&value.to_be_bytes());  // Append four bytes (big-endian)
+        self.data.extend_from_slice(&value.to_be_bytes());
         self.position += 4;
     }
 
@@ -93,26 +89,23 @@ impl Packet {
 
     #[inline(always)]
     pub fn p8(&mut self, value: i64) {
-        self.data.extend_from_slice(&value.to_be_bytes());  // Append eight bytes (big-endian)
+        self.data.extend_from_slice(&value.to_be_bytes());
         self.position += 8;
     }
 
     #[inline(always)]
     pub fn pjstr(&mut self, str: &str, terminator: u8) {
-        // Make sure we have enough capacity
         let required_len = self.position + str.len() + 1;
         if self.data.len() < required_len {
             self.data.resize(required_len, 0);
         }
 
-        // Copy the string bytes
         let mut length = self.position;
         for byte in str.bytes() {
             self.data[length] = byte;
             length += 1;
         }
 
-        // Add terminator
         self.data[length] = terminator;
         self.position = length + 1;
     }
@@ -121,7 +114,6 @@ impl Packet {
     pub fn pjstr2(&mut self, str: &str) {
         self.p1(0);
         self.pjstr(str, 0);
-        self.p1(0);
     }
 
     #[inline(always)]

@@ -1,9 +1,6 @@
 use cache::file_handler;
-use tokio::net::{TcpListener, TcpStream};
-use tokio::io::{Result, AsyncReadExt, AsyncWriteExt, copy};
-use std::net::SocketAddr;
-use std::pin::Pin;
-use std::future::Future;
+use tokio::net::TcpListener;
+use tokio::io::Result;
 
 use io::packet::Packet;
 
@@ -15,17 +12,14 @@ use js5::js5_server::js5_server;
 use worldlist::worldlist_server::worldlist_server;
 
 fn main() -> Result<()> {
-    // Synchronous code to run before starting the async runtime
     if std::env::var_os("RUST_LOG").is_none() {
         std::env::set_var("RUST_LOG", "debug");
     }
     env_logger::init();
     file_handler::init();
 
-    // Create the async runtime
     let rt = Runtime::new()?;
 
-    // Run the async main function within the runtime
     rt.block_on(async_main())
 }
 
