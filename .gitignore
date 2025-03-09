@@ -5,5 +5,7 @@ src/io/target/
 src/engine/target/
 src/constants/target/
 src/cache/target/
+src/js5/target/
+src/math/target/
 
 src/cacheLocal

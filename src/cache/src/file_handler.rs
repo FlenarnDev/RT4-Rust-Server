@@ -8,7 +8,7 @@ pub static MASTER_INDEX_VEC: OnceLock<Vec<u8>> = OnceLock::new();
 
 pub fn init() {
     debug!("Initializing cacheLocal from ./cacheLocal");
-    let cache = match Cache::open("./src/cacheLocal") {
+    let cache = match Cache::open("../../src/cacheLocal") {
         Ok(cache) => {
             debug!("Archive count: {:?}", cache.archives.len());
             cache

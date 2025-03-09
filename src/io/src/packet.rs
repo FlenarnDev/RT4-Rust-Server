@@ -140,10 +140,10 @@ impl Packet {
     }
 
     #[inline(always)]
-    pub fn pbytes(&mut self, src: &Vec<u8>, length: usize) {
+    pub fn pbytes(&mut self, src: &Vec<u8>, offset: usize, length: usize) {
         for i in 0..length
         {
-            self.data.push(src[i]);
+            self.data.push(src[0 + i]);
             self.position += 1;
         }
     }

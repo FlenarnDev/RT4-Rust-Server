@@ -4,6 +4,6 @@ pub enum ClientState {
     New,
     Js5,
     Login,
-    Login_Secondary,
+    Game,
     Other,
 }

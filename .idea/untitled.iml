@@ -10,6 +10,8 @@
       <sourceFolder url="file://$MODULE_DIR$/src/io/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/engine/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/login/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/engine/src/entity/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/math/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/src/jagex/target" />
       <excludeFolder url="file://$MODULE_DIR$/src/js5/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
@@ -18,6 +20,8 @@
       <excludeFolder url="file://$MODULE_DIR$/src/io/target" />
       <excludeFolder url="file://$MODULE_DIR$/src/engine/target" />
       <excludeFolder url="file://$MODULE_DIR$/src/login/target" />
+      <excludeFolder url="file://$MODULE_DIR$/src/engine/src/entity/target" />
+      <excludeFolder url="file://$MODULE_DIR$/src/math/target" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
