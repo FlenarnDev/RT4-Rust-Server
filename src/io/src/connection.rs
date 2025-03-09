@@ -1,18 +1,13 @@
-use std::io::repeat;
-use std::sync::Arc;
-use std::time::Duration;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::io::{Result, AsyncReadExt, AsyncWriteExt, copy};
 use std::net::SocketAddr;
-use tokio::net::TcpStream;
-
 use log::{debug, error, info};
-use rand::Rng;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::time::timeout;
-use tokio::sync::Mutex;
+use tokio::io;
 use constants::js5_out::js5_out;
 use constants::title_protocol::title_protocol;
 use crate::packet::Packet;
 use crate::client_state::ClientState;
+
 
 pub struct Connection {
     pub socket: TcpStream,
@@ -23,130 +18,100 @@ pub struct Connection {
     pub peer_addr: SocketAddr,
 }
 
-impl Connection {
-    pub async fn handle_data_flush(&mut self) {
-        let output_data = self.output.data.clone();
+pub async fn write_and_clear_output(conn: &mut Connection) -> Result<()> {
+    if !conn.output.data.is_empty() {
+        conn.socket.write_all(&conn.output.data).await?;
+        conn.socket.flush().await?;
+        conn.output.data.clear(); // Clear the output packet after writing
+        debug!("Output packet written and cleared");
+    }
+    Ok(())
+}
 
-        info!("Flushing data: {:?} to: {:?}", output_data, self.peer_addr);
-        match self.socket.write_all(&output_data).await {
-            Ok(_) => {
-                self.output = Packet::from(vec![]);
-                if let Err(e) = self.socket.flush().await {
-                    error!("Failed to flush: {} to: {:?}", e, self.peer_addr);
-                    self.state = ClientState::Closed;
+pub async fn handle_connection(mut conn: Connection) -> Result<()> {
+    debug!("Handling connection from {}", conn.peer_addr);
+
+    loop {
+        match conn.state {
+            ClientState::CONNECTED => {
+                // Read only single byte from the socket, we need nothing more to
+                // identify the title protocol. 
+                // Over-reading breaks the worldlist fetching.
+                let mut single_byte = [0; 1];
+                conn.socket.read_exact(&mut single_byte).await?;
+                let opcode = single_byte[0];
+                debug!("Received opcode: {}", opcode);
+
+                match opcode {
+                    title_protocol::JS5OPEN => {
+                        let mut version_bytes = [0; 4];
+                        conn.socket.read_exact(&mut version_bytes).await?;
+                        let client_version = u32::from_be_bytes(version_bytes);
+                        debug!("Client version: {}", client_version);
+                        if client_version == 530 {
+                            conn.output.p1(js5_out::SUCCESS);
+                            conn.state = ClientState::JS5;
+                        } else {
+                            conn.output.p1(js5_out::OUT_OF_DATE);
+                            conn.state = ClientState::CLOSED;
+                        }
+                        write_and_clear_output(&mut conn).await?;
+                    }
+                    title_protocol::WORLDLIST_FETCH => {
+                        conn.state = ClientState::WORLDLIST;
+                    }
+                    _ => {
+                        conn.state = ClientState::CONNECTED;
+                    }
                 }
-            },
-            Err(e) => {
-                self.output = Packet::from(vec![]);
-                error!("Failed to write: {} to: {:?}", e, self.peer_addr);
-                self.state = ClientState::Closed;
+            }
+            ClientState::JS5 => {
+                let target_addr = "127.0.0.1:43595".parse::<SocketAddr>().unwrap();
+                let target_stream = TcpStream::connect(target_addr).await?;
+                conn.state = ClientState::PROXYING(target_stream);
+            }
+            ClientState::WORLDLIST => {
+                let target_addr = "127.0.0.1:43596".parse::<SocketAddr>().unwrap();
+                let target_stream = TcpStream::connect(target_addr).await?;
+                conn.state = ClientState::PROXYING(target_stream);
+            }
+
+            ClientState::PROXYING(ref mut target_stream) => {
+                let (mut ri, mut wi) = conn.socket.split();
+                let (mut ro, mut wo) = target_stream.split();
+
+                tokio::select! {
+                    result1 = copy(&mut ri, &mut wo) => {
+                        if result1.is_err() {
+                            conn.state = ClientState::CLOSED;
+                            debug!("Error while proxying: {:?}", result1);
+                            break;
+                        }
+                    },
+                    result2 = copy(&mut ro, &mut wi) => {
+                        if result2.is_err() {
+                            conn.state = ClientState::CLOSED;
+                            debug!("Error while proxying: {:?}", result2);
+                            break;
+                        }
+                    },
+                }
+            }
+            ClientState::CLOSED => {
+                debug!("Closing connection from {}", conn.peer_addr);
+                conn.socket.shutdown().await?;
+                conn.active = false;
+                break;
+            }
+
+            _ => {
+                conn.state = ClientState::CLOSED;
             }
         }
-    }
-    
-    async fn handle_login(&mut self) {
-        debug!("Login connection from: {:?}", self.peer_addr);
-        let playerHash = self.input.g1();
 
-        self.output.p1(0);
-
-        let session_key = 56468456468454; // TODO - actual rng implementation
-        self.output.p8(session_key.clone());
-        //self.state = ClientState::Login_Secondary;
-        self.handle_data_flush().await;
-    }
-
-    async fn handle_login_secondary(&mut self) {
-        debug!("Login secondary connection from: {:?}", self.peer_addr);
-        let opcode = self.input.g1();
-        debug!("Received opcode is {}", opcode);
-
-        if opcode != 16 && opcode != 18 {
-            self.output.p1(22); // TODO - Const this
-            self.handle_data_flush().await;
-            self.state = ClientState::Closed;
-            return
+        if !conn.active {
+            break;
         }
-
-        let length = self.input.g2();
-        let client_version = self.input.g4();
-
-        if client_version != 530 {
-            self.output.p1(6);
-            self.handle_data_flush().await;
-            self.state = ClientState::Closed;
-            return
-        }
-
-        let byte1 = self.input.g1s();
-        let adverts_suppressed = self.input.g1s();
-        let byte2 = self.input.g1s();
-        let window_mode = self.input.g1s();
-        let canvas_width = self.input.g2();
-        let canvas_height = self.input.g2();
-        let anti_aliasing = self.input.g1s();
-        let uid = self.input.gbytes(24);
-        let client_settings = self.input.gjstr(0);
-        let affiliate = self.input.g4();
-        let preferences = self.input.g4();
-
-        let client_verify_id = self.input.g2();
-
-        let mut checksums = Vec::new();
-        for _ in 0..28 {
-            checksums.push(self.input.g4());
-        }
-
     }
-
-    async fn handle_worldlist_fetch(&mut self) {
-        debug!("Worldlist fetch from: {:?}", self.peer_addr);
-
-        self.output.p1(0); // Response code - TODO
-        let checksum = self.input.g4();
-
-        let mut response = Packet::from(Vec::new());
-        response.p1(1); // Version
-
-        if checksum != 2 {
-            response.p1(1); // Update
-            response.psmart(1); // Active world list
-
-            // World Block
-            response.psmart(191);
-            response.pjstr2("Sweden");
-
-            response.psmart(1); // Offset
-            response.psmart(1); // Array size
-            response.psmart(1); // Active World count
-
-            // Sweden world
-            response.psmart(0);
-            response.p1(0);
-            response.p4(0);
-            response.pjstr2("");
-            response.pjstr2("localhost");
-
-            // Default value
-            response.p4(1);
-        } else {
-            response.p1(0);
-        }
-
-        response.psmart(0);
-        response.p2(40);
-        response.psmart(1);
-        response.p2(20);
-        debug!("worldlist data: {:?}", response.data);
-
-        // Predefined response data
-        let temp = vec![
-            1, 1, 1, 128, 191, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 40, 1, 0, 20
-        ];
-
-        self.output.p2(response.data.len() as i32);
-        self.output.pbytes(&temp, 0, response.data.len());
-
-        self.handle_data_flush().await;
-    }
+    Ok(())
 }

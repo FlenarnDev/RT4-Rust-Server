@@ -12,6 +12,8 @@
       <sourceFolder url="file://$MODULE_DIR$/src/login/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/engine/src/entity/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/math/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/worldlist/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/worldlisttemp/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/src/jagex/target" />
       <excludeFolder url="file://$MODULE_DIR$/src/js5/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
@@ -22,6 +24,8 @@
       <excludeFolder url="file://$MODULE_DIR$/src/login/target" />
       <excludeFolder url="file://$MODULE_DIR$/src/engine/src/entity/target" />
       <excludeFolder url="file://$MODULE_DIR$/src/math/target" />
+      <excludeFolder url="file://$MODULE_DIR$/src/worldlist/target" />
+      <excludeFolder url="file://$MODULE_DIR$/src/worldlisttemp/target" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

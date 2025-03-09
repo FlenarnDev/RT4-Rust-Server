@@ -1,5 +1,3 @@
-use log::debug;
-
 #[derive(Clone)]
 pub struct Packet {
     pub data: Vec<u8>,
@@ -101,12 +99,21 @@ impl Packet {
 
     #[inline(always)]
     pub fn pjstr(&mut self, str: &str, terminator: u8) {
-        let mut length: usize = self.position;
+        // Make sure we have enough capacity
+        let required_len = self.position + str.len() + 1;
+        if self.data.len() < required_len {
+            self.data.resize(required_len, 0);
+        }
+
+        // Copy the string bytes
+        let mut length = self.position;
         for byte in str.bytes() {
-            unsafe { *self.data.get_unchecked_mut(length) = byte };
+            self.data[length] = byte;
             length += 1;
         }
-        unsafe { *self.data.get_unchecked_mut(length) = terminator };
+
+        // Add terminator
+        self.data[length] = terminator;
         self.position = length + 1;
     }
 
@@ -143,7 +150,7 @@ impl Packet {
     pub fn pbytes(&mut self, src: &Vec<u8>, offset: usize, length: usize) {
         for i in 0..length
         {
-            self.data.push(src[0 + i]);
+            self.data.push(src[offset + i]);
             self.position += 1;
         }
     }

@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::OnceLock;
 use log::{debug, error};
 use rs2cache::Cache;
@@ -7,8 +8,8 @@ pub static CACHE: OnceLock<Cache> = OnceLock::new();
 pub static MASTER_INDEX_VEC: OnceLock<Vec<u8>> = OnceLock::new();
 
 pub fn init() {
-    debug!("Initializing cacheLocal from ./cacheLocal");
-    let cache = match Cache::open("../../src/cacheLocal") {
+    debug!("Initializing cacheLocal from ./src/cacheLocal");
+    let cache = match Cache::open("./src/cacheLocal") {
         Ok(cache) => {
             debug!("Archive count: {:?}", cache.archives.len());
             cache

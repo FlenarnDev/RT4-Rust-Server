@@ -46,7 +46,7 @@ async fn async_main() -> Result<(), Box<dyn Error>> {
                 // Wrap the connection in Arc<Mutex> to safely share it between tasks
                 let connection = Arc::new(Mutex::new(Connection {
                     socket,
-                    state: ClientState::New,
+                    state: ClientState::CONNECTED,
                     input: Packet::from(vec![]),
                     output: Packet::from(vec![]),
                     active: true,

@@ -1,0 +1,10 @@
+[package]
+name = "worldlist"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+lazy_static = "1.4"
+log = "0.4.26"
+tokio = "1.44.0"
+io = { path = "../../src/io" }
