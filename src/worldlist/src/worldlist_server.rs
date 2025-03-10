@@ -13,11 +13,9 @@ fn write_country_info(response: &mut Packet, country: &str) {
 }
 
 async fn process(connection: &mut Connection) -> std::io::Result<()> {
-    let mut buffer = [0; 1024];
-    debug!("worldlist data: {:?}", connection.input.data);
+    let mut buffer = [0; 4];
     let n = connection.socket.read(&mut buffer).await?;
     connection.input = Packet::from(buffer[..n].to_vec());
-    debug!("worldlist data: {:?}", connection.input.data);
 
     connection.output.p1(0);
     let checksum = connection.input.g4();

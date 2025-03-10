@@ -10,14 +10,14 @@ use crate::js5_request::Js5Request;
 pub struct Js5RequestDecoder;
 
 impl Js5RequestDecoder {
+    /// `All upstream packets are exactly 4 bytes long, including the opcode. Unused payload bytes are set to zero.`
+    /// @Graham
+    /// Make use of that information for packet verifications where suitable.
     fn decode(connection: &mut Connection) -> Result<Js5Request, Box<dyn Error>> {
-        let request;
-
         let opcode = connection.input.g1();
-        debug!("JS5 opcode is {}", opcode);
-        request = match opcode {
-            js5_in::REQUEST | js5_in::PRIORITY_REQUEST => {
-                let prefetch = opcode == js5_in::PRIORITY_REQUEST;
+        let request = match opcode {
+            js5_in::PREFETCH | js5_in::URGENT => {
+                let prefetch = opcode == js5_in::URGENT;
                 let archive = connection.input.g1();
                 let group = connection.input.g2();
                 
@@ -26,23 +26,32 @@ impl Js5RequestDecoder {
                     archive,
                     group
                 }
-            },
+            }
             js5_in::REKEY => {
                 let key = connection.input.g1();
-                let _unknown = connection.input.g2();
-                Js5Request::Rekey { key }
+                if connection.input.g2() != 0 {
+                    Js5Request::Invalid
+                } else {
+                    Js5Request::Rekey { key }
+                }
             },
             js5_in::LOGGED_IN => {
-                connection.input.g3();
-                Js5Request::LoggedIn
+                if connection.input.g3() != 0 {
+                    Js5Request::Invalid
+                } else {
+                    Js5Request::LoggedIn
+                }
             },
             js5_in::LOGGED_OUT => {
                 connection.input.g3();
                 Js5Request::LoggedOut
             },
             js5_in::CONNECTED => {
-                connection.input.g3();
-                Js5Request::Connected
+                if connection.input.g3() != 3 {
+                    Js5Request::Invalid
+                } else {
+                    Js5Request::Connected
+                }
             }
             js5_in::DISCONNECT => {
                 connection.input.g3();
@@ -65,7 +74,6 @@ impl Js5RequestDecoder {
             connection.input = Packet::from(buffer[..n].to_vec());
 
             while connection.input.remaining() > 0 {
-                debug!("Processing JS5 request");
                 request = Js5RequestDecoder::decode(connection)?;
                 match &request {
                     Js5Request::Group{..} => {
@@ -88,9 +96,13 @@ impl Js5RequestDecoder {
                     },
                     Js5Request::Disconnect => {
                         debug!("JS5 Disconnect request");
+                        connection.state = ClientState::CLOSED;
+                        break;
                     },
                     Js5Request::Invalid => {
                         error!("Invalid JS5 request");
+                        connection.state = ClientState::CLOSED;
+                        break;
                     },
                 }
             }

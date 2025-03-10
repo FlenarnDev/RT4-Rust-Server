@@ -147,16 +147,16 @@ impl Packet {
         }
     }
 
-    #[inline(always)]
     pub fn g1(&mut self) -> u8 {
+        let value = self.data[self.position]; // Will panic if out of bounds
         self.position += 1;
-        unsafe { *self.data.get_unchecked(self.position - 1) }
+        value
     }
 
-    #[inline(always)]
-    pub fn g1s(&mut self) -> i8 {
+    pub fn g1b(&mut self) -> i8 {
+        let value = self.data[self.position] as i8; // Will panic if out of bounds
         self.position += 1;
-        (unsafe { *self.data.get_unchecked(self.position - 1) }) as i8
+        value
     }
 
     #[inline(always)]

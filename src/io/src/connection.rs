@@ -48,16 +48,12 @@ pub async fn handle_connection(mut conn: Connection) -> Result<()> {
                 // Read only single byte from the socket, we need nothing more to
                 // identify the title protocol. 
                 // Over-reading breaks the worldlist fetching.
-                let mut single_byte = [0; 1];
-                conn.socket.read_exact(&mut single_byte).await?;
-                let opcode = single_byte[0];
+                let opcode = conn.socket.read_u8().await?;
                 debug!("Received opcode: {}", opcode);
 
                 match opcode {
                     title_protocol::JS5OPEN => {
-                        let mut version_bytes = [0; 4];
-                        conn.socket.read_exact(&mut version_bytes).await?;
-                        let client_version = u32::from_be_bytes(version_bytes);
+                        let client_version = conn.socket.read_u32().await?;
                         debug!("Client version: {}", client_version);
                         if client_version == 530 {
                             conn.output.p1(js5_out::SUCCESS);
@@ -72,7 +68,8 @@ pub async fn handle_connection(mut conn: Connection) -> Result<()> {
                         conn.state = ClientState::WORLDLIST;
                     }
                     _ => {
-                        conn.state = ClientState::CONNECTED;
+                        debug!("Unknown opcode: {}", opcode);
+                        conn.state = ClientState::CLOSED;
                     }
                 }
             }
