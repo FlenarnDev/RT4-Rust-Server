@@ -11,7 +11,7 @@ pub struct Js5RequestDecoder;
 
 impl Js5RequestDecoder {
     fn decode(connection: &mut Connection) -> Result<Js5Request, Box<dyn Error>> {
-        let mut request;
+        let request;
 
         let opcode = connection.input.g1();
         debug!("JS5 opcode is {}", opcode);

@@ -1,6 +1,6 @@
 use tokio::net::TcpListener;
 use log::{debug, error};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncReadExt;
 use io::client_state::ClientState;
 use io::connection::{write_and_clear_output, Connection};
 use io::packet::Packet;
