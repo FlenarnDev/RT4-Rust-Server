@@ -3,7 +3,7 @@ use log::{debug, error};
 use tokio::io::AsyncReadExt;
 use constants::js5_in::js5_in;
 use io::client_state::ClientState;
-use io::connection::Connection;
+use io::connection::{write_and_clear_output, Connection};
 use io::packet::Packet;
 use crate::js5_request::Js5Request;
 
@@ -15,14 +15,15 @@ impl Js5RequestDecoder {
     /// Make use of that information for packet verifications where suitable.
     fn decode(connection: &mut Connection) -> Result<Js5Request, Box<dyn Error>> {
         let opcode = connection.input.g1();
+        debug!("JS5 opcode: {}", opcode);
         let request = match opcode {
             js5_in::PREFETCH | js5_in::URGENT => {
                 let prefetch = opcode == js5_in::URGENT;
                 let archive = connection.input.g1();
                 let group = connection.input.g2();
-                
+
                 Js5Request::Group {
-                    prefetch,
+                    urgent: prefetch,
                     archive,
                     group
                 }
@@ -64,12 +65,12 @@ impl Js5RequestDecoder {
         };
         Ok(request)
     }
-    
+
     pub(crate) async fn process(connection: &mut Connection) -> Result<Js5Request, Box<dyn Error>> {
         let mut request = Js5Request::Invalid;
 
         while connection.active {
-            let mut buffer = [0; 1024];
+            let mut buffer = [0; 4];
             let n = connection.socket.read(&mut buffer).await?;
             connection.input = Packet::from(buffer[..n].to_vec());
 
@@ -79,6 +80,7 @@ impl Js5RequestDecoder {
                     Js5Request::Group{..} => {
                         debug!("JS5 Group request with: {:?}", request);
                         Js5Request::fulfill_request(connection, &request).await.expect("Failed to fulfill JS5 request");
+                        write_and_clear_output(connection).await?;
                     },
                     Js5Request::Rekey { key } => {
                         debug!("JS5 Rekey request with key: {}", key);
@@ -107,7 +109,7 @@ impl Js5RequestDecoder {
                 }
             }
         }
-        
+
         Ok(request)
     }
 }

@@ -470,9 +470,8 @@ impl Packet {
         if self.position >= self.data.len() {
             return Vec::new();
         }
-
-        let available = self.data.len() - self.position;
-        let to_read = std::cmp::min(length, available);
+        
+        let to_read = std::cmp::min(length, self.remaining() as usize);
 
         let result = self.data[self.position..self.position + to_read].to_vec();
         self.position += to_read;

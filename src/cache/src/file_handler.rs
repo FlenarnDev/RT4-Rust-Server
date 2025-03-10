@@ -7,7 +7,7 @@ pub static CACHE: OnceLock<Cache> = OnceLock::new();
 pub static MASTER_INDEX_VEC: OnceLock<Vec<u8>> = OnceLock::new();
 
 pub fn init() {
-    debug!("Initializing cacheLocal from ./src/cacheLocal");
+    debug!("Initializing 'cache' from ./src/cacheLocal");
     let cache = match Cache::open("./src/cacheLocal") {
         Ok(cache) => {
             cache

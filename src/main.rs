@@ -4,7 +4,7 @@ use tokio::io::Result;
 
 use io::packet::Packet;
 
-use log::debug;
+use log::{debug, info};
 use tokio::runtime::Runtime;
 use io::client_state::ClientState;
 use io::connection::{handle_connection, Connection};
@@ -25,7 +25,7 @@ fn main() -> Result<()> {
 
 async fn async_main() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:40000").await?;
-    println!("Main server listening on 127.0.0.1:40000");
+    info!("Main server listening on 127.0.0.1:40000");
 
     tokio::spawn(async {
         if let Err(e) = js5_server().await {

@@ -1,7 +1,8 @@
+use std::io::ErrorKind;
 use tokio::net::TcpStream;
 use tokio::io::{Result, AsyncReadExt, AsyncWriteExt, copy};
 use std::net::SocketAddr;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use constants::js5_out::js5_out;
 use constants::title_protocol::title_protocol;
 use crate::packet::Packet;

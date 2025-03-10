@@ -1,5 +1,5 @@
 use tokio::net::TcpListener;
-use log::{debug, error};
+use log::{debug, error, info};
 use tokio::io::AsyncReadExt;
 use io::client_state::ClientState;
 use io::connection::{write_and_clear_output, Connection};
@@ -75,7 +75,7 @@ async fn handle_worldlist_connection(mut connection: Connection) -> std::io::Res
 
 pub async fn worldlist_server() -> std::io::Result<()> {
     let listener = TcpListener::bind("127.0.0.1:43596").await?;
-    println!("Worldlist server listening on 127.0.0.1:43596");
+    info!("Worldlist server listening on 127.0.0.1:43596");
     
     while let Ok((socket, peer_addr)) = listener.accept().await {
         let conn = Connection {
