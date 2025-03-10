@@ -14,6 +14,7 @@
       <sourceFolder url="file://$MODULE_DIR$/src/math/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/worldlist/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/worldlisttemp/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/io/src/benches" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/src/jagex/target" />
       <excludeFolder url="file://$MODULE_DIR$/src/js5/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />

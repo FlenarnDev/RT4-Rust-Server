@@ -13,3 +13,9 @@ js5 = { path = "./src/js5" }
 cache = { path = "./src/cache" }
 worldlist = { path = "./src/worldlist" }
 tokio = "1.44.0"
+criterion = "0.5.1"
+
+[[bench]]
+name = "packet_bench"
+harness = false
+path = "./src/io/src/benches/packet_bench.rs"

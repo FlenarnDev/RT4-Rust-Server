@@ -16,11 +16,9 @@ async fn process(connection: &mut Connection) -> std::io::Result<()> {
     let mut buffer = [0; 4];
     let n = connection.socket.read(&mut buffer).await?;
     connection.input = Packet::from(buffer[..n].to_vec());
-
-    connection.output.p1(0);
     let checksum = connection.input.g4();
 
-    let mut response = Packet::from(Vec::new());
+    let mut response = Packet::from(vec![]);
     response.p1(1);
 
     if checksum != 2 {
@@ -51,6 +49,13 @@ async fn process(connection: &mut Connection) -> std::io::Result<()> {
     response.p2(40);
     response.psmart(1);
     response.p2(20);
+    
+    
+    debug!("Response size: {}", response.data.len());
+
+    connection.output = Packet::new(3 + response.data.len() + 5);
+
+    connection.output.p1(0);
     
     connection.output.p2(response.data.len() as i32);
     connection.output.pbytes(&response.data, 0, response.data.len());

@@ -55,6 +55,7 @@ pub async fn handle_connection(mut conn: Connection) -> Result<()> {
                     title_protocol::JS5OPEN => {
                         let client_version = conn.socket.read_u32().await?;
                         debug!("Client version: {}", client_version);
+                        
                         if client_version == 530 {
                             conn.output.p1(js5_out::SUCCESS);
                             conn.state = ClientState::JS5;

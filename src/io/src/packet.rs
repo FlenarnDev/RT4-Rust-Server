@@ -9,7 +9,7 @@ impl Packet {
     /// Create a 'Packet' with a fixed sized allocated buffer.
     pub fn new(size: usize) -> Packet {
         Packet {
-            data: Vec::with_capacity(size),
+            data: vec![0; size], // Initialize with zeros instead of just capacity
             position: 0,
             bit_position: 0,
         }
@@ -26,8 +26,8 @@ impl Packet {
     }
 
     /// Create a new 'Packet' from an input file from IO.
-    pub fn io(path: String) -> Packet {
-        Packet::from(std::fs::read(path).unwrap())
+    pub fn io(path: String) -> Result<Packet, std::io::Error> {
+        Ok(Packet::from(std::fs::read(path)?))
     }
 
     /// Returns the remaining amount of storage available for this 'Packet'.
@@ -43,53 +43,92 @@ impl Packet {
         self.data.len()
     }
 
+    /// Returns true if the packet contains no data.
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
     #[inline(always)]
     pub fn p1(&mut self, value: i32) {
-        self.data.push(value as u8);
+        let value_byte = value as u8;
+        if self.position >= self.data.len() {
+            self.data.push(value_byte);
+        } else {
+            self.data[self.position] = value_byte;
+        }
         self.position += 1;
     }
 
     #[inline(always)]
     pub fn p2(&mut self, value: i32) {
-        let truncated_value = value as u16;
-        self.data.extend_from_slice(&truncated_value.to_be_bytes());
+        let required_len = self.position + 2;
+        if self.data.len() < required_len {
+            self.data.resize(required_len, 0);
+        }
+
+        let start: usize = self.position;
+        self.data[start..start + 2].copy_from_slice(&(value as u16).to_be_bytes());
         self.position += 2;
     }
 
     #[inline(always)]
     pub fn ip2(&mut self, value: i32) {
+        let required_len = self.position + 2;
+        if self.data.len() < required_len {
+            self.data.resize(required_len, 0);
+        }
+
         let start: usize = self.position;
-        unsafe { self.data.get_unchecked_mut(start..start + 2) }
-            .copy_from_slice(&(value as u16).to_le_bytes());
+        self.data[start..start + 2].copy_from_slice(&(value as u16).to_le_bytes());
         self.position += 2;
     }
 
     #[inline(always)]
     pub fn p3(&mut self, value: i32) {
+        let required_len = self.position + 3;
+        if self.data.len() < required_len {
+            self.data.resize(required_len, 0);
+        }
+
         let start: usize = self.position;
-        unsafe { *self.data.get_unchecked_mut(start) = (value >> 16) as u8 };
-        unsafe { self.data.get_unchecked_mut(start + 1..start + 3) }
-            .copy_from_slice(&(value as u16).to_be_bytes());
+        self.data[start] = (value >> 16) as u8;
+        self.data[start + 1..start + 3].copy_from_slice(&(value as u16).to_be_bytes());
         self.position += 3;
     }
 
     #[inline(always)]
     pub fn p4(&mut self, value: i32) {
-        self.data.extend_from_slice(&value.to_be_bytes());
+        let required_len = self.position + 4;
+        if self.data.len() < required_len {
+            self.data.resize(required_len, 0);
+        }
+
+        let start: usize = self.position;
+        self.data[start..start + 4].copy_from_slice(&value.to_be_bytes());
         self.position += 4;
     }
 
     #[inline(always)]
     pub fn ip4(&mut self, value: i32) {
+        let required_len = self.position + 4;
+        if self.data.len() < required_len {
+            self.data.resize(required_len, 0);
+        }
+
         let start: usize = self.position;
-        unsafe { self.data.get_unchecked_mut(start..start + 4) }
-            .copy_from_slice(&value.to_le_bytes());
+        self.data[start..start + 4].copy_from_slice(&value.to_le_bytes());
         self.position += 4;
     }
 
     #[inline(always)]
     pub fn p8(&mut self, value: i64) {
-        self.data.extend_from_slice(&value.to_be_bytes());
+        let required_len = self.position + 8;
+        if self.data.len() < required_len {
+            self.data.resize(required_len, 0);
+        }
+
+        let start: usize = self.position;
+        self.data[start..start + 8].copy_from_slice(&value.to_be_bytes());
         self.position += 8;
     }
 
@@ -100,14 +139,11 @@ impl Packet {
             self.data.resize(required_len, 0);
         }
 
-        let mut length = self.position;
-        for byte in str.bytes() {
-            self.data[length] = byte;
-            length += 1;
-        }
-
-        self.data[length] = terminator;
-        self.position = length + 1;
+        let start = self.position;
+        let end = start + str.len();
+        self.data[start..end].copy_from_slice(str.as_bytes());
+        self.data[end] = terminator;
+        self.position = end + 1;
     }
 
     #[inline(always)]
@@ -139,138 +175,168 @@ impl Packet {
     }
 
     #[inline(always)]
-    pub fn pbytes(&mut self, src: &Vec<u8>, offset: usize, length: usize) {
-        for i in 0..length
-        {
-            self.data.push(src[offset + i]);
-            self.position += 1;
+    pub fn pbytes(&mut self, src: &[u8], offset: usize, length: usize) {
+        let required_len = self.position + length;
+        if self.data.len() < required_len {
+            self.data.resize(required_len, 0);
         }
+
+        let start = self.position;
+        let end = start + length;
+        self.data[start..end].copy_from_slice(&src[offset..offset + length]);
+        self.position += length;
     }
 
+    #[inline(always)]
     pub fn g1(&mut self) -> u8 {
-        let value = self.data[self.position]; // Will panic if out of bounds
+        if self.position >= self.data.len() {
+            return 0; // Prevent out-of-bounds access
+        }
+        let value = self.data[self.position];
         self.position += 1;
         value
     }
 
+    #[inline(always)]
     pub fn g1b(&mut self) -> i8 {
-        let value = self.data[self.position] as i8; // Will panic if out of bounds
+        if self.position >= self.data.len() {
+            return 0; // Prevent out-of-bounds access
+        }
+        let value = self.data[self.position] as i8;
         self.position += 1;
         value
     }
 
     #[inline(always)]
     pub fn g2(&mut self) -> u16 {
+        if self.position + 2 > self.data.len() {
+            self.position = self.data.len();
+            return 0; // Prevent out-of-bounds access
+        }
+
+        let pos = self.position;
         self.position += 2;
-        let pos: usize = self.position;
-        u16::from_be_bytes(
-            unsafe { self.data.get_unchecked(pos - 2..pos) }
-                .try_into()
-                .unwrap(),
-        )
+        u16::from_be_bytes(self.data[pos..pos + 2].try_into().unwrap())
     }
 
     #[inline(always)]
     pub fn g2s(&mut self) -> i16 {
+        if self.position + 2 > self.data.len() {
+            self.position = self.data.len();
+            return 0; // Prevent out-of-bounds access
+        }
+
+        let pos = self.position;
         self.position += 2;
-        let pos: usize = self.position;
-        i16::from_be_bytes(
-            unsafe { self.data.get_unchecked(pos - 2..pos) }
-                .try_into()
-                .unwrap(),
-        )
+        i16::from_be_bytes(self.data[pos..pos + 2].try_into().unwrap())
     }
 
     #[inline(always)]
     pub fn ig2s(&mut self) -> i16 {
+        if self.position + 2 > self.data.len() {
+            self.position = self.data.len();
+            return 0; // Prevent out-of-bounds access
+        }
+
+        let pos = self.position;
         self.position += 2;
-        let pos: usize = self.position;
-        i16::from_le_bytes(
-            unsafe { self.data.get_unchecked(pos - 2..pos) }
-                .try_into()
-                .unwrap(),
-        )
+        i16::from_le_bytes(self.data[pos..pos + 2].try_into().unwrap())
     }
 
     #[inline(always)]
     pub fn g3(&mut self) -> i32 {
+        if self.position + 3 > self.data.len() {
+            self.position = self.data.len();
+            return 0; // Prevent out-of-bounds access
+        }
+
+        let pos = self.position;
         self.position += 3;
-        let pos: usize = self.position;
-        ((unsafe { *self.data.get_unchecked(pos - 3) } as u32) << 16
-            | u16::from_be_bytes(
-            unsafe { self.data.get_unchecked(pos - 2..pos) }
-                .try_into()
-                .unwrap(),
+
+        ((self.data[pos] as u32) << 16 | u16::from_be_bytes(
+            self.data[pos + 1..pos + 3].try_into().unwrap()
         ) as u32) as i32
     }
 
     #[inline(always)]
     pub fn g4(&mut self) -> i32 {
-        self.position += 4;
-        let pos: usize = self.position;
-
-        if pos < 4 {
+        if self.position + 4 > self.data.len() {
+            self.position = self.data.len();
             return 0; // Prevent out-of-bounds access
         }
 
-        let b1 = self.data.get(pos - 4).copied().unwrap_or(0) as u32;
-        let b2 = self.data.get(pos - 3).copied().unwrap_or(0) as u32;
-        let b3 = self.data.get(pos - 2).copied().unwrap_or(0) as u32;
-        let b4 = self.data.get(pos - 1).copied().unwrap_or(0) as u32;
-
-        ((b1 << 24) | (b2 << 16) | (b3 << 8) | b4) as i32
+        let pos = self.position;
+        self.position += 4;
+        i32::from_be_bytes(self.data[pos..pos + 4].try_into().unwrap())
     }
 
     #[inline(always)]
     pub fn g4s(&mut self) -> i32 {
+        if self.position + 4 > self.data.len() {
+            self.position = self.data.len();
+            return 0; // Prevent out-of-bounds access
+        }
+
+        let pos = self.position;
         self.position += 4;
-        let pos: usize = self.position;
-        i32::from_be_bytes(
-            unsafe { self.data.get_unchecked(pos - 4..pos) }
-                .try_into()
-                .unwrap(),
-        )
+        i32::from_be_bytes(self.data[pos..pos + 4].try_into().unwrap())
     }
 
     #[inline(always)]
     pub fn ig4s(&mut self) -> i32 {
+        if self.position + 4 > self.data.len() {
+            self.position = self.data.len();
+            return 0; // Prevent out-of-bounds access
+        }
+
+        let pos = self.position;
         self.position += 4;
-        let pos: usize = self.position;
-        return i32::from_le_bytes(
-            unsafe { self.data.get_unchecked(pos - 4..pos) }
-                .try_into()
-                .unwrap(),
-        );
+        i32::from_le_bytes(self.data[pos..pos + 4].try_into().unwrap())
     }
 
     #[inline(always)]
     pub fn g8s(&mut self) -> i64 {
+        if self.position + 8 > self.data.len() {
+            self.position = self.data.len();
+            return 0; // Prevent out-of-bounds access
+        }
+
+        let pos = self.position;
         self.position += 8;
-        let pos: usize = self.position;
-        i64::from_be_bytes(
-            unsafe { self.data.get_unchecked(pos - 8..pos) }
-                .try_into()
-                .unwrap(),
-        )
+        i64::from_be_bytes(self.data[pos..pos + 8].try_into().unwrap())
     }
 
     /// Reads a string from the internal buffer until a terminator byte is encountered.
     #[inline(always)]
     pub fn gjstr(&mut self, terminator: u8) -> String {
-        let pos: usize = self.position;
+        let pos = self.position;
         let mut length = pos;
-        while unsafe { *self.data.get_unchecked(length) } != terminator {
+
+        while length < self.data.len() && self.data[length] != terminator {
             length += 1;
         }
-        let str: &str =
-            unsafe { std::str::from_utf8_unchecked(&self.data.get_unchecked(pos..length)) };
+
+        if length >= self.data.len() {
+            self.position = self.data.len();
+            return String::new();
+        }
+
+        let result = match std::str::from_utf8(&self.data[pos..length]) {
+            Ok(s) => s.to_owned(),
+            Err(_) => String::new(), // Handle invalid UTF-8
+        };
+
         self.position = length + 1;
-        str.to_owned()
+        result
     }
 
     #[inline(always)]
     pub fn gsmart(&mut self) -> i32 {
-        if unsafe { *self.data.get_unchecked(self.position) } < 128 {
+        if self.position >= self.data.len() {
+            return 0; // Prevent out-of-bounds access
+        }
+
+        if self.data[self.position] < 128 {
             self.g1() as i32
         } else {
             self.g2() as i32 - 32768
@@ -279,7 +345,11 @@ impl Packet {
 
     #[inline(always)]
     pub fn gsmarts(&mut self) -> i32 {
-        if unsafe { *self.data.get_unchecked(self.position) } < 128 {
+        if self.position >= self.data.len() {
+            return 0; // Prevent out-of-bounds access
+        }
+
+        if self.data[self.position] < 128 {
             self.g1() as i32 - 64
         } else {
             self.g2() as i32 - 49152
@@ -288,26 +358,40 @@ impl Packet {
 
     #[inline(always)]
     pub fn gbytes(&mut self, length: usize) -> Vec<u8> {
-        let mut result = Vec::with_capacity(length);
-        for i in 0..length {
-            result.push(self.data[self.position + i]);
+        if self.position + length > self.data.len() {
+            let available = if self.position < self.data.len() {
+                self.data.len() - self.position
+            } else {
+                0
+            };
+
+            let result = if available > 0 {
+                self.data[self.position..self.position + available].to_vec()
+            } else {
+                Vec::new()
+            };
+
+            self.position = self.data.len();
+            return result;
         }
+
+        let result = self.data[self.position..self.position + length].to_vec();
         self.position += length;
         result
     }
 
-    /// Sets the internal bit position (`bit_pos`) to the current byte position (`pos`)
+    /// Sets the internal bit position (`bit_position`) to the current byte position (`position`)
     /// converted to bit position. This is typically used when switching from byte-based
     /// to bit-based addressing.
     #[inline(always)]
     pub fn bits(&mut self) {
-        self.bit_position = self.position << 3;
+        self.bit_position = self.position * 8; // Clearer than << 3
     }
 
-    /// Sets the internal byte position (`pos`) based on the current bit position (`bit_pos`).
+    /// Sets the internal byte position (`position`) based on the current bit position (`bit_position`).
     /// This is typically used when switching from bit-based addressing back to byte-based addressing.
     #[inline(always)]
     pub fn bytes(&mut self) {
-        self.position = (self.bit_position + 7) >> 3;
+        self.position = (self.bit_position + 7) / 8; // Clearer than >> 3
     }
 }
