@@ -50,11 +50,6 @@ async fn process(connection: &mut Connection) -> std::io::Result<()> {
     response.psmart(1);
     response.p2(20);
     
-    
-    debug!("Response size: {}", response.data.len());
-
-    connection.output = Packet::new(3 + response.data.len() + 5);
-
     connection.output.p1(0);
     
     connection.output.p2(response.data.len() as i32);
