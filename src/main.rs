@@ -6,9 +6,9 @@ use io::packet::Packet;
 
 use log::{debug, info};
 use tokio::runtime::Runtime;
-use io::client_state::ClientState;
+use io::client_state::ConnectionState;
 use io::connection::{handle_connection, Connection};
-use js5::js5_server::js5_server;
+use js5::main::js5_server;
 use worldlist::worldlist_server::worldlist_server;
 
 fn main() -> Result<()> {
@@ -42,7 +42,7 @@ async fn async_main() -> Result<()> {
     while let Ok((socket, peer_addr)) = listener.accept().await {
         let conn = Connection {
             socket,
-            state: ClientState::CONNECTED,
+            state: ConnectionState::CONNECTED,
             input: Packet::from(Vec::new()),
             output: Packet::from(Vec::new()),
             active: true,

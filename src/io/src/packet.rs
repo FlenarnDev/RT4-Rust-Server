@@ -7,10 +7,10 @@ pub struct Packet {
 
 // Helper function for branch prediction optimization
 macro_rules! likely {
-    ($expr:expr) => {
-        $expr
+        ($expr:expr) => {
+            $expr
+        }
     }
-}
 
 impl Packet {
     /// Create a 'Packet' with a fixed sized allocated buffer.
@@ -470,7 +470,7 @@ impl Packet {
         if self.position >= self.data.len() {
             return Vec::new();
         }
-        
+
         let to_read = std::cmp::min(length, self.remaining() as usize);
 
         let result = self.data[self.position..self.position + to_read].to_vec();

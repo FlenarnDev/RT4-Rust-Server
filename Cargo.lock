@@ -181,6 +181,7 @@ name = "cache"
 version = "0.1.0"
 dependencies = [
  "log",
+ "once_cell",
  "rs2-cache",
 ]
 
@@ -911,6 +912,8 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 [[package]]
 name = "rs2-cache"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "419ca41d7ab4db0eac18f36119ec9d96f3498996400a714ed05ffe21866fc1af"
 dependencies = [
  "bzip2",
  "crc32fast",
@@ -1243,7 +1246,6 @@ dependencies = [
  "js5",
  "log",
  "tokio",
- "worldlist",
 ]
 
 [[package]]
@@ -1454,16 +1456,6 @@ name = "windows_x86_64_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
-
-[[package]]
-name = "worldlist"
-version = "0.1.0"
-dependencies = [
- "io",
- "lazy_static",
- "log",
- "tokio",
-]
 
 [[package]]
 name = "zeroize"

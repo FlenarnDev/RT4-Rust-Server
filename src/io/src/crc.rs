@@ -4,7 +4,7 @@ pub struct CRC {
 
 impl CRC {
     /// Reversed CRC-32 polynomial for Cyclic Redundancy Check (CRC).
-    /// This is sometimes referred to as CRC32B,
+    /// This is sometimes referred to as CRC32B.
     const CRC32B: u32 = 0xEDB88320;
     
     pub fn new() -> CRC {

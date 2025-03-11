@@ -8,5 +8,6 @@ src/cache/target/
 src/js5/target/
 src/math/target/
 src/worldlist/target/
+src/proxy/target/
 
 src/cacheLocal/
