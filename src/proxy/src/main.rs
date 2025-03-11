@@ -1,241 +1,238 @@
-// Run the proxy server
+use std::collections::HashMap;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+use std::thread;
+use log::debug;
+use socket2::{Socket, Domain, Type};
 
-use std::error::Error;
-use std::time::Duration;
-use constants::proxy::proxy::{BUFFER_SIZE, READ_TIMEOUT_MS};
-use constants::server_addresses::server_addresses::{JS5_ADDR, WORLDLIST_ADDR, PROXY_ADDR};
-use constants::title_protocol::title_protocol;
-use io::connection::Connection;
-use io::packet::Packet;
-use tokio::net::{TcpListener, TcpStream};
-use log::{debug, error, info};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::time::timeout;
-
-// Define destination types as a simple enum
-#[derive(Debug)]
-enum Destination {
-    JS5,
-    WorldList,
-    Terminate, // Indicates connection should be terminated
+// Connection status enum
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum ConnectionStatus {
+    Active,
+    Idle,
+    Closed,
 }
 
-// Return enum value to indicate connection destination
-fn choose_backend_and_consume(packet: &mut Packet) -> Destination {
-    if packet.is_empty() {
-        debug!("Empty packet received, will terminate connection");
-        return Destination::Terminate;
-    }
-
-    match packet.g1() {
-        title_protocol::JS5OPEN => {
-            debug!("Routing to JS5_ADDR: {}", JS5_ADDR);
-            Destination::JS5
-        }
-
-        title_protocol::WORLDLIST_FETCH => {
-            debug!("Routing to WORLDLIST_ADDR: {}", WORLDLIST_ADDR);
-            Destination::WorldList
-        }
-
-        _ => {
-            debug!("Unknown packet type, will terminate connection");
-            Destination::Terminate
-        }
-    }
+// Connection info structure
+struct ConnectionInfo {
+    stream: TcpStream,
+    status: ConnectionStatus,
+    last_activity: Instant,
+    destination_server: String,
 }
 
-// Helper function to get the address for a destination
-fn get_address(destination: &Destination) -> &str {
-    match destination {
-        Destination::JS5 => JS5_ADDR,
-        Destination::WorldList => WORLDLIST_ADDR,
-        Destination::Terminate => unreachable!(), // This should never be called
-    }
+// Proxy server structure
+struct ProxyServer {
+    connections: HashMap<String, ConnectionInfo>,
 }
 
-async fn handle_proxy_client(client_stream: TcpStream) -> Result<(), Box<dyn Error>> {
-    let client_addr = client_stream.peer_addr()?;
-    debug!("New connection from: {}", client_addr);
+impl ProxyServer {
+    fn new() -> Self {
+        ProxyServer {
+            connections: HashMap::new(),
+        }
+    }
 
-    // Create a connection from the client stream
-    let mut client_conn = Connection::new(client_stream);
+    // Add or update a connection
+    fn update_connection(&mut self, key: String, stream: TcpStream, destination: String) {
+        let info = ConnectionInfo {
+            stream,
+            status: ConnectionStatus::Active,
+            last_activity: Instant::now(),
+            destination_server: destination,
+        };
+        self.connections.insert(key, info);
+    }
 
-    // Use timeout to avoid waiting indefinitely for initial data
-    let read_result = timeout(
-        Duration::from_millis(READ_TIMEOUT_MS),
-        client_conn.read_packet()
-    ).await;
-
-    let read_bytes = match read_result {
-        Ok(Ok(n)) => {
-            debug!("Read {} bytes of initial data", n);
-            if n == 0 {
-                debug!("Client closed connection immediately");
-                return Ok(());
+    // Update connection status
+    fn set_connection_status(&mut self, key: &str, status: ConnectionStatus) {
+        if let Some(conn) = self.connections.get_mut(key) {
+            conn.status = status;
+            if status == ConnectionStatus::Active {
+                conn.last_activity = Instant::now();
             }
-            n
-        },
-        Ok(Err(e)) => {
-            error!("Error reading from client: {}", e);
-            return Ok(());
-        },
-        Err(_) => {
-            error!("Timeout waiting for initial data from {}", client_addr);
-            return Ok(());
         }
-    };
-
-    // Determine the destination based on the first byte and consume it
-    let destination = choose_backend_and_consume(client_conn.inbound());
-
-    // Check if we should terminate
-    if matches!(destination, Destination::Terminate) {
-        debug!("No valid destination for {}, terminating connection", client_addr);
-        return Ok(());
     }
 
-    // Get the backend address for the destination
-    let backend_addr = get_address(&destination);
-    debug!("Routing client {} to backend: {}", client_addr, backend_addr);
-
-    // Connect to the chosen backend
-    let backend_stream = match TcpStream::connect(backend_addr).await {
-        Ok(stream) => stream,
-        Err(e) => {
-            error!("Failed to connect to backend {}: {}", backend_addr, e);
-            return Ok(());
-        }
-    };
-
-    // Extract the data we need from client_conn BEFORE taking ownership of the stream
-    let inbound_position = client_conn.inbound().position;
-    let initial_data = client_conn.inbound().data[inbound_position..read_bytes].to_vec();
-
-    // Extract the stream from client_conn
-    let client_stream = client_conn.stream;
-
-    // Extract the stream from client_conn
-    let _ = client_conn;
-
-    // Split the streams to avoid sharing mutable references across tasks
-    let (mut client_read, mut client_write) = client_stream.into_split();
-    let (mut backend_read, mut backend_write) = backend_stream.into_split();
-
-    // Forward initial data from client to backend
-    if let Err(e) = backend_write.write_all(&initial_data).await {
-        error!("Error forwarding initial data: {}", e);
-        return Ok(());
+    // Remove a connection
+    fn remove_connection(&mut self, key: &str) {
+        self.connections.remove(key);
     }
-    debug!("Forwarded {} bytes of data to backend", initial_data.len() - 1);
 
-    // Now we can use more efficient split streams for bidirectional forwarding
-    // This avoids the need for mutexes entirely
-    let client_to_backend = tokio::spawn(async move {
-        let mut buffer = [0u8; BUFFER_SIZE];
+    // Get connection status
+    fn get_connection_status(&self, key: &str) -> Option<ConnectionStatus> {
+        self.connections.get(key).map(|conn| conn.status)
+    }
 
+    // Check for timed out connections and clean them up
+    fn cleanup_connections(&mut self) {
+        let now = Instant::now();
+        let timeout = Duration::from_millis(500); // 500ms timeout
+
+        let keys_to_remove: Vec<String> = self.connections.iter()
+            .filter(|(_, conn)| {
+                conn.status == ConnectionStatus::Idle &&
+                    now.duration_since(conn.last_activity) > timeout
+            })
+            .map(|(key, _)| key.clone())
+            .collect();
+
+        for key in keys_to_remove {
+            println!("Connection timed out: {}", key);
+            if let Some(mut conn) = self.connections.remove(&key) {
+                // Send FIN packet or other cleanup
+                let _ = conn.stream.shutdown(std::net::Shutdown::Both);
+            }
+        }
+    }
+
+    // Get statistics about connections
+    fn get_stats(&self) -> (usize, usize, usize) {
+        let active = self.connections.values()
+            .filter(|c| c.status == ConnectionStatus::Active)
+            .count();
+        let idle = self.connections.values()
+            .filter(|c| c.status == ConnectionStatus::Idle)
+            .count();
+        let closed = self.connections.values()
+            .filter(|c| c.status == ConnectionStatus::Closed)
+            .count();
+
+        (active, idle, closed)
+    }
+}
+
+fn main() -> std::io::Result<()> {
+    // Add socket2 crate to Cargo.toml
+    // [dependencies]
+    // socket2 = "0.5.3"
+
+    // Create the TCP listener
+    let listener = TcpListener::bind("127.0.0.1:40000")?;
+    println!("Server listening on port 8080");
+
+    // Create the shared proxy state
+    let proxy = Arc::new(Mutex::new(ProxyServer::new()));
+
+    // Start the cleanup thread
+    let cleanup_proxy = Arc::clone(&proxy);
+    thread::spawn(move || {
         loop {
-            match client_read.read(&mut buffer).await {
-                Ok(0) => {
-                    debug!("Client closed connection");
-                    break;
-                },
-                Ok(n) => {
-                    debug!("Read {} bytes from client", n);
-                    if let Err(e) = backend_write.write_all(&buffer[0..n]).await {
-                        error!("Error writing to backend: {}", e);
-                        break;
-                    }
-                    debug!("Forwarded {} bytes to backend", n);
-                },
-                Err(e) => {
-                    error!("Error reading from client: {}", e);
-                    break;
-                }
-            }
-        }
+            thread::sleep(Duration::from_millis(100)); // Check every 100ms
+            let mut proxy = cleanup_proxy.lock().unwrap();
+            proxy.cleanup_connections();
 
-        // Shutdown the write half
-        let _ = backend_write.shutdown().await;
+            // Log current connection stats
+            let (active, idle, _) = proxy.get_stats();
+            println!("Connections - Active: {}, Idle: {}", active, idle);
+        }
     });
 
-    let backend_to_client = tokio::spawn(async move {
-        let mut buffer = [0u8; BUFFER_SIZE];
+    // Accept connections and process them
+    for stream in listener.incoming() {
+        match stream {
+            Ok(stream) => {
+                let proxy_clone = Arc::clone(&proxy);
 
-        loop {
-            match backend_read.read(&mut buffer).await {
-                Ok(0) => {
-                    debug!("Backend closed connection");
-                    break;
-                },
-                Ok(n) => {
-                    debug!("Read {} bytes from backend", n);
-                    if let Err(e) = client_write.write_all(&buffer[0..n]).await {
-                        error!("Error writing to client: {}", e);
-                        break;
+                // Set SO_KEEPALIVE on the socket
+                if let Ok(stream_clone) = stream.try_clone() {
+                    // Convert TcpStream to socket2::Socket for more options
+                    let socket = Socket::from(stream_clone);
+                    socket.set_keepalive(true)?;
+
+                    // On some platforms, you can configure keep-alive parameters
+                    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios"))]
+                    {
+                        // Set keep-alive time (time before sending probes)
+                        socket.set_tcp_keepalive(&socket2::TcpKeepalive::new().with_time(Duration::from_millis(500)))?;
                     }
-                    debug!("Forwarded {} bytes to client", n);
-                },
-                Err(e) => {
-                    error!("Error reading from backend: {}", e);
-                    break;
                 }
-            }
-        }
 
-        // Shutdown the write half
-        let _ = client_write.shutdown().await;
-    });
+                // Get peer address for connection tracking
+                let peer_addr = match stream.peer_addr() {
+                    Ok(addr) => addr.to_string(),
+                    Err(_) => "unknown".to_string(),
+                };
 
-    // Wait for either task to complete
-    tokio::select! {
-        _ = client_to_backend => debug!("Client to backend task completed"),
-        _ = backend_to_client => debug!("Backend to client task completed"),
-    }
+                // Generate a unique connection ID
+                let conn_id = format!("conn_{}", peer_addr);
 
-    debug!("Connection from {} closed", client_addr);
-    Ok(())
-}
-
-async fn run_proxy_server() -> Result<(), Box<dyn Error>> {
-    let listener = TcpListener::bind(PROXY_ADDR).await?;
-
-    loop {
-        match listener.accept().await {
-            Ok((stream, _)) => {
-                tokio::spawn(async move {
-                    if let Err(e) = handle_proxy_client(stream).await {
-                        error!("Connection handler error: {}", e);
-                    }
+                thread::spawn(move || {
+                    handle_client(stream, conn_id, proxy_clone);
                 });
-            },
+            }
             Err(e) => {
-                error!("Error accepting connection: {}", e);
+                eprintln!("Error accepting connection: {}", e);
             }
         }
     }
+
+    Ok(())
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    if std::env::var_os("RUST_LOG").is_none() {
-        unsafe {
-            std::env::set_var("RUST_LOG", "debug");
-        }
+// Client handler function
+fn handle_client(mut stream: TcpStream, conn_id: String, proxy: Arc<Mutex<ProxyServer>>) {
+    // Get destination server (simplified - in a real proxy you'd parse the request)
+    let destination = "example.com:80".to_string();
+
+    // Register the connection
+    {
+        let mut proxy_guard = proxy.lock().unwrap();
+        proxy_guard.update_connection(conn_id.clone(), stream.try_clone().unwrap(), destination.clone());
     }
-    env_logger::init();
 
-    info!("Starting TCP Proxy System");
-    info!("---------------------------------------------");
-    info!("Starting proxy server: {}", PROXY_ADDR);
-    info!("---------------------------------------------");
+    println!("New connection: {}", conn_id);
 
-    tokio::select! {
-        result = run_proxy_server() => {
-            if let Err(e) = result {
-                println!("Proxy server error: {}", e);
+    // Buffer for reading data
+    let mut buffer = [0; 1024];
+
+    // Main connection loop
+    loop {
+        // Set read timeout to detect inactive connections
+        let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+
+        match stream.read(&mut buffer) {
+            Ok(0) => {
+                // Connection closed by client
+                println!("Connection closed by client: {}", conn_id);
+                let mut proxy_guard = proxy.lock().unwrap();
+                proxy_guard.set_connection_status(&conn_id, ConnectionStatus::Closed);
+                proxy_guard.remove_connection(&conn_id);
+                break;
+            }
+            Ok(bytes_read) => {
+                // Got data, connection is active
+                let mut proxy_guard = proxy.lock().unwrap();
+                proxy_guard.set_connection_status(&conn_id, ConnectionStatus::Active);
+                drop(proxy_guard); // Release the lock
+                debug!("Read {} bytes from stream: {}", bytes_read, conn_id);
+
+                let mut zero_vec = vec![0];
+                zero_vec.push(0);
+                
+                // Echo the data back (in a real proxy, you'd forward to destination)
+                if let Err(e) = stream.write(&*zero_vec) {
+                    eprintln!("Error writing to stream: {}", e);
+                    break;
+                }
+            }
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock ||
+                e.kind() == std::io::ErrorKind::TimedOut => {
+                // No data available, connection is idle
+                let mut proxy_guard = proxy.lock().unwrap();
+                proxy_guard.set_connection_status(&conn_id, ConnectionStatus::Idle);
+            }
+            Err(e) => {
+                // Other errors
+                eprintln!("Error reading from stream: {}", e);
+                let mut proxy_guard = proxy.lock().unwrap();
+                proxy_guard.set_connection_status(&conn_id, ConnectionStatus::Closed);
+                proxy_guard.remove_connection(&conn_id);
+                break;
             }
         }
+        debug!("buffer: {:?}", buffer);
     }
-    Ok(())
 }

@@ -13,6 +13,5 @@ io = { path = "../io" }
 cache = { path = "../cache" }
 constants = { path = "../constants" }
 rs2-cache = "0.3.0"
-async-trait = "0.1.87"
 
 

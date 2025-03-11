@@ -718,6 +718,7 @@ dependencies = [
  "env_logger",
  "io",
  "log",
+ "socket2",
  "tokio",
 ]
 

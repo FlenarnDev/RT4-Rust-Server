@@ -9,6 +9,8 @@ use io::client_state::ConnectionState;
 use io::connection::Connection;
 use log::{debug, error, info};
 use tokio::net::{TcpListener, TcpStream};
+use constants::js5_in::js5_in;
+use crate::js5_request::Js5Request;
 
 async fn run_js5_server() -> Result<(), Box<dyn Error>> {
     let listener = TcpListener::bind(JS5_ADDR).await?;
@@ -40,8 +42,11 @@ async fn handle_js5_client(stream: TcpStream) -> Result<(), Box<dyn Error>> {
     let addr = stream.peer_addr()?;
     debug!("New connection from: {}", addr);
 
+    
     // Create a connection to manage packets
     let mut connection = Connection::new(stream);
+    
+    //connection.outbound.p1(0);
 
     loop {
         // Read incoming packet
@@ -52,8 +57,9 @@ async fn handle_js5_client(stream: TcpStream) -> Result<(), Box<dyn Error>> {
             },
             Ok(n) => {
                 debug!("Received packet: {} bytes from: {}", n, addr);
-
+                
                 if connection.state == ConnectionState::New {
+                    connection.inbound.g1();
                     let client_version = if !connection.inbound().is_empty() {
                         connection.inbound().g4()
                     } else {
@@ -72,14 +78,79 @@ async fn handle_js5_client(stream: TcpStream) -> Result<(), Box<dyn Error>> {
                     }
                 } else if connection.state == ConnectionState::Connected {
                     debug!("Client state is Connected");
-                    js5_request_decoder::process(&mut connection);
+                    while connection.inbound().remaining() > 0 {
+                        let opcode = connection.inbound().g1();
+                        let request = match opcode {
+                            js5_in::PREFETCH | js5_in::URGENT => {
+                                Js5Request::Group {
+                                    urgent: opcode == js5_in::URGENT,
+                                    archive: connection.inbound.g1(),
+                                    group: connection.inbound.g2()
+                                }
+                            }
+
+                            js5_in::REKEY => {
+                                let key = connection.inbound.g1();
+                                if connection.inbound.g2() != 0 {
+                                    Js5Request::Invalid
+                                } else {
+                                    Js5Request::Rekey { key }
+                                }
+                            }
+                            js5_in::LOGGED_IN => {
+                                if connection.inbound.g3() != 0 {
+                                    Js5Request::Invalid
+                                } else {
+                                    Js5Request::LoggedIn
+                                }
+                            }
+                            js5_in::LOGGED_OUT => {
+                                connection.inbound().g3();
+                                Js5Request::LoggedOut
+                            }
+                            js5_in::CONNECTED => {
+                                // Value is always '3'.
+                                if connection.inbound.g3() != 3 {
+                                    Js5Request::Invalid
+                                } else {
+                                    Js5Request::Connected
+                                }
+                            }
+                            js5_in::DISCONNECT => {
+                                connection.inbound().g3();
+                                Js5Request::Disconnect
+                            }
+                            _ => {
+                                debug!("Invalid opcode: {}", opcode);
+                                connection.inbound().g3();
+                                Js5Request::Invalid
+                            }
+                        };
+                        debug!("Received JS5 request: {:?}", request);
+
+                        match request {
+                            Js5Request::Group { .. } => {
+                                Js5Request::fulfill_request(&mut connection, &request)?;
+                            }
+
+                            Js5Request::Invalid => {
+                                // TODO - terminate early.
+                            }
+                            _ => {
+                                // Currently nothing.
+                            }
+                        }
+                    }
+                    //js5_request_decoder::process(&mut connection);
+                } else {
+                    debug!("Client state is undefined.");
                 }
 
                 // Send response if outbound isn't empty
                 if !connection.outbound.is_empty() {
                     match connection.write_packet().await {
                         Ok(bytes_written) => {
-                            debug!(" Sent response packet: {} bytes", bytes_written);
+                            debug!("Sent response packet: {} bytes", bytes_written);
                         },
                         Err(e) => {
                             error!("Error writing to client: {}", e);

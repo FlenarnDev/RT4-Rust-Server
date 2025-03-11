@@ -6,8 +6,8 @@ use crate::js5_request::Js5Request;
 
 ///All upstream packets are exactly 4 bytes long, including the opcode.
 /// Unused payload bytes are set to zero.
-pub(crate) fn process(connection: &mut Connection) {
-    while connection.inbound().remaining() > 0 {
+pub(crate) async fn process(connection: &mut Connection) {
+    //while connection.inbound().remaining() > 0 {
         let opcode = connection.inbound().g1();
         let request = match opcode {
             js5_in::PREFETCH | js5_in::URGENT => {
@@ -70,5 +70,18 @@ pub(crate) fn process(connection: &mut Connection) {
                 // Currently nothing.
             }
         }
-    }
+
+        // Send response if outbound isn't empty
+        if !connection.outbound.is_empty() {
+            match connection.write_packet().await {
+                Ok(bytes_written) => {
+                    debug!("Sent response packet: {} bytes", bytes_written);
+                },
+                Err(e) => {
+                    error!("Error writing to client: {}", e);
+                    
+                }
+            }
+        }
+    //}
 }

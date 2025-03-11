@@ -71,62 +71,30 @@ impl Js5Request {
                     }
                 })?;
 
-                // Make sure the data is properly "trimmed" to match Go's behavior
-                // In Go: return data[0 : size+headerLength]
-                let data_length = data.len();
-                //debug!("Raw data length: {}", data_length);
+                let length = 2 + data.len() + (512 + data.len()) / 511;
+                //debug!("Length of data packet: {}", data.len());
+                //debug!("Data packet1: {:?}", data);
+                //debug!("Estimated length of final packet: {}", length);
 
-                // Following Go's writeChunked logic more closely
-                // Calculate total packet size including potential delimiters
-                let mut total_size = 3; // Initial header size: index(1) + file(2)
-                let mut remaining = data_length;
-                let mut position = 3;
+                let mut data_packet = Packet::from(data);
+                connection.outbound = Packet::new(length);
 
-                // Calculate how many delimiters we'll need
-                while remaining > 0 {
-                    let block_len = min(remaining, 512 - (position % 512));
-                    position += block_len;
-                    remaining -= block_len;
-
-                    if position % 512 == 0 && remaining > 0 {
-                        total_size += 1; // Add one for the delimiter
-                        position += 1;
-                    }
-                }
-
-                total_size += data_length;
-                //debug!("Calculated total size: {}", total_size);
-
-                // Create new outbound packet
-                connection.outbound = Packet::new(total_size);
-
-                // Write header
                 connection.outbound.p1(*archive as i32);
                 connection.outbound.p2(*group as i32);
 
-                // Reset counters for actual writing
-                remaining = data_length;
-                position = 3;
-                let mut src_pos = 0;
+                let mut compression = data_packet.data[0];
+                if *urgent {
+                    compression |= 0x80;
+                }
+                connection.outbound.p1(compression as i32);
 
-                // Write data in chunks using Go's algorithm
-                while remaining > 0 {
-                    let block_len = min(remaining, 512 - (position % 512));
-                    //debug!("Writing block: pos={}, src_pos={}, len={}", position, src_pos, block_len);
+                let data_to_write = data_packet.gbytes(min(data_packet.remaining() as usize, 508));
+                connection.outbound.pbytes(&*data_to_write, 0, data_to_write.len());
 
-                    // Write data chunk
-                    connection.outbound.pbytes(&data, src_pos, block_len);
-
-                    position += block_len;
-                    src_pos += block_len;
-                    remaining -= block_len;
-
-                    // Add delimiter if needed
-                    if position % 512 == 0 && remaining > 0 {
-                        //debug!("Adding delimiter at position {}", position);
-                        connection.outbound.p1(255);
-                        position += 1;
-                    }
+                while data_packet.remaining() > 0 {
+                    connection.outbound.p1(255);
+                    let data_to_add = data_packet.gbytes(min(data_packet.remaining() as usize, BYTES_AFTER_BLOCK));
+                    connection.outbound.pbytes(&*data_to_add, 0, data_to_add.len());
                 }
             }
 
