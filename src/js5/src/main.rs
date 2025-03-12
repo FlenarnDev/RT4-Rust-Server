@@ -5,7 +5,7 @@ use cache::file_handler::ensure_initialized;
 use constants::js5_out::js5_out;
 use constants::server_addresses::server_addresses::JS5_ADDR;
 use io::client_state::ConnectionState;
-use io::connection::Connection;
+use io::connection::{try_write_packet, Connection};
 use log::{debug, error, info};
 use tokio::net::{TcpListener, TcpStream};
 use constants::js5_in::js5_in;
@@ -121,6 +121,7 @@ async fn handle_js5_client(stream: TcpStream) -> Result<(), Box<dyn Error>> {
                         match request {
                             Js5Request::Group { .. } => {
                                 Js5Request::fulfill_request(&mut connection, &request)?;
+                                try_write_packet(&mut connection).await;
                             }
 
                             Js5Request::Invalid => {
@@ -129,26 +130,17 @@ async fn handle_js5_client(stream: TcpStream) -> Result<(), Box<dyn Error>> {
                             _ => {
                                 // Currently nothing.
                             }
+                            
+                            
                         }
+                        
                     }
                 } else {
                     error!("Client state is undefined.");
                     connection.state = ConnectionState::Closed;
                 }
 
-                // Send response if outbound isn't empty
-                if !connection.outbound.is_empty() {
-                    match connection.write_packet().await {
-                        Ok(bytes_written) => {
-                            debug!("Sent response packet: {} bytes", bytes_written);
-                        },
-                        Err(e) => {
-                            error!("Error writing to client: {}", e);
-                            connection.state = ConnectionState::Closed;
-                            break;
-                        }
-                    }
-                }
+                try_write_packet(&mut connection).await;
 
                 if connection.state == ConnectionState::Closed {
                     connection.shutdown().await?;
@@ -169,7 +161,7 @@ async fn handle_js5_client(stream: TcpStream) -> Result<(), Box<dyn Error>> {
 async fn main() -> Result<(), Box<dyn Error>> {
     if std::env::var_os("RUST_LOG").is_none() {
         unsafe {
-            std::env::set_var("RUST_LOG", "info");
+            std::env::set_var("RUST_LOG", "debug");
         }
     }
     env_logger::init();

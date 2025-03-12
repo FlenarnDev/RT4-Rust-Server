@@ -1,3 +1,4 @@
+use log::{debug, error};
 use constants::proxy::proxy::BUFFER_SIZE;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -74,5 +75,21 @@ impl Connection {
         let mut connection = Self::new(stream);
         connection.inbound.data = initial_data;
         connection
+    }
+}
+
+pub async fn try_write_packet(connection: &mut Connection) {
+    if !connection.outbound.is_empty() {
+        match connection.write_packet().await {
+            Ok(bytes_written) => {
+                debug!("Sent response packet: {} bytes", bytes_written);
+               
+            },
+            Err(e) => {
+                error!("Error writing to client: {}", e);
+                connection.state = ConnectionState::Closed;
+                
+            }
+        }
     }
 }

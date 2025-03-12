@@ -23,19 +23,21 @@ fn choose_backend_and_consume(packet: &mut Packet) -> Destination {
         return Destination::Terminate;
     }
 
-    match packet.g1() {
-        title_protocol::JS5OPEN => {
+    let opcode = packet.g1();
+    
+    match opcode {
+        title_protocol::INIT_JS5REMOTE_CONNECTION => {
             debug!("Routing to JS5_ADDR: {}", JS5_ADDR);
             Destination::JS5
         }
 
-        title_protocol::WORLDLIST_FETCH => {
+        title_protocol::REQUEST_WORLDLIST => {
             debug!("Routing to WORLDLIST_ADDR: {}", WORLDLIST_ADDR);
             Destination::WorldList
         }
 
         _ => {
-            debug!("Unknown packet type, will terminate connection");
+            debug!("Unknown packet type: {}, will terminate connection", opcode);
             Destination::Terminate
         }
     }
@@ -136,12 +138,12 @@ async fn handle_proxy_client(client_stream: TcpStream) -> Result<(), Box<dyn Err
                     break;
                 },
                 Ok(n) => {
-                    debug!("Read {} bytes from client", n);
+                    //debug!("Read {} bytes from client", n);
                     if let Err(e) = backend_write.write_all(&buffer[0..n]).await {
                         error!("Error writing to backend: {}", e);
                         break;
                     }
-                    debug!("Forwarded {} bytes to backend", n);
+                    //debug!("Forwarded {} bytes to backend", n);
                 },
                 Err(e) => {
                     error!("Error reading from client: {}", e);
@@ -164,12 +166,12 @@ async fn handle_proxy_client(client_stream: TcpStream) -> Result<(), Box<dyn Err
                     break;
                 },
                 Ok(n) => {
-                    debug!("Read {} bytes from backend", n);
+                    //debug!("Read {} bytes from backend", n);
                     if let Err(e) = client_write.write_all(&buffer[0..n]).await {
                         error!("Error writing to client: {}", e);
                         break;
                     }
-                    debug!("Forwarded {} bytes to client", n);
+                    //debug!("Forwarded {} bytes to client", n);
                 },
                 Err(e) => {
                     error!("Error reading from backend: {}", e);
