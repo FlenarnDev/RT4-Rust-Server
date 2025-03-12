@@ -1,4 +1,3 @@
-mod js5_request_decoder;
 mod js5_request;
 
 use std::error::Error;
@@ -40,16 +39,11 @@ async fn run_js5_server() -> Result<(), Box<dyn Error>> {
 
 async fn handle_js5_client(stream: TcpStream) -> Result<(), Box<dyn Error>> {
     let addr = stream.peer_addr()?;
-    debug!("New connection from: {}", addr);
-
+    info!("New connection from: {}", addr);
     
-    // Create a connection to manage packets
     let mut connection = Connection::new(stream);
     
-    //connection.outbound.p1(0);
-
     loop {
-        // Read incoming packet
         match connection.read_packet().await {
             Ok(0) => {
                 debug!("Connection closed by client: {}", addr);
@@ -57,9 +51,7 @@ async fn handle_js5_client(stream: TcpStream) -> Result<(), Box<dyn Error>> {
             },
             Ok(n) => {
                 debug!("Received packet: {} bytes from: {}", n, addr);
-                
                 if connection.state == ConnectionState::New {
-                    connection.inbound.g1();
                     let client_version = if !connection.inbound().is_empty() {
                         connection.inbound().g4()
                     } else {
@@ -77,13 +69,12 @@ async fn handle_js5_client(stream: TcpStream) -> Result<(), Box<dyn Error>> {
 
                     }
                 } else if connection.state == ConnectionState::Connected {
-                    debug!("Client state is Connected");
                     while connection.inbound().remaining() > 0 {
                         let opcode = connection.inbound().g1();
                         let request = match opcode {
                             js5_in::PREFETCH | js5_in::URGENT => {
                                 Js5Request::Group {
-                                    urgent: opcode == js5_in::URGENT,
+                                    urgent: opcode == js5_in::PREFETCH,
                                     archive: connection.inbound.g1(),
                                     group: connection.inbound.g2()
                                 }
@@ -126,7 +117,6 @@ async fn handle_js5_client(stream: TcpStream) -> Result<(), Box<dyn Error>> {
                                 Js5Request::Invalid
                             }
                         };
-                        debug!("Received JS5 request: {:?}", request);
 
                         match request {
                             Js5Request::Group { .. } => {
@@ -141,9 +131,9 @@ async fn handle_js5_client(stream: TcpStream) -> Result<(), Box<dyn Error>> {
                             }
                         }
                     }
-                    //js5_request_decoder::process(&mut connection);
                 } else {
-                    debug!("Client state is undefined.");
+                    error!("Client state is undefined.");
+                    connection.state = ConnectionState::Closed;
                 }
 
                 // Send response if outbound isn't empty
@@ -154,6 +144,7 @@ async fn handle_js5_client(stream: TcpStream) -> Result<(), Box<dyn Error>> {
                         },
                         Err(e) => {
                             error!("Error writing to client: {}", e);
+                            connection.state = ConnectionState::Closed;
                             break;
                         }
                     }
@@ -178,7 +169,7 @@ async fn handle_js5_client(stream: TcpStream) -> Result<(), Box<dyn Error>> {
 async fn main() -> Result<(), Box<dyn Error>> {
     if std::env::var_os("RUST_LOG").is_none() {
         unsafe {
-            std::env::set_var("RUST_LOG", "debug");
+            std::env::set_var("RUST_LOG", "info");
         }
     }
     env_logger::init();
