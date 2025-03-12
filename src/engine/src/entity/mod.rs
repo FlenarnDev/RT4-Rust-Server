@@ -17,3 +17,4 @@ mod map_find_square_type;
 mod hittype;
 mod interaction;
 mod npc_mode;
+pub mod network_player;

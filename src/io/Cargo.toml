@@ -10,10 +10,6 @@ tokio = { version = "1", features = ["full"] }
 log = "0.4.26"
 constants = { path = "../constants" }
 criterion = "0.5.1"
-num-bigint = "0.4.6"
-num-traits = "0.2.19"
-pem = "3.0.5"
-rsa = "0.10.0-pre.4"
 
 [dev-dependencies]
 criterion = "0.5.1"

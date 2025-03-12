@@ -83,12 +83,12 @@ pub async fn try_write_packet(connection: &mut Connection) {
         match connection.write_packet().await {
             Ok(bytes_written) => {
                 debug!("Sent response packet: {} bytes", bytes_written);
-               
+
             },
             Err(e) => {
                 error!("Error writing to client: {}", e);
                 connection.state = ConnectionState::Closed;
-                
+
             }
         }
     }

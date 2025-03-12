@@ -3,7 +3,7 @@ use std::time::Duration;
 use constants::proxy::proxy::{BUFFER_SIZE, READ_TIMEOUT_MS};
 use constants::server_addresses::server_addresses::{JS5_ADDR, WORLDLIST_ADDR, PROXY_ADDR};
 use constants::title_protocol::title_protocol;
-use io::connection::Connection;
+use io::connection::{try_write_packet, Connection};
 use io::packet::Packet;
 use tokio::net::{TcpListener, TcpStream};
 use log::{debug, error, info};
@@ -14,6 +14,7 @@ use tokio::time::timeout;
 enum Destination {
     JS5,
     WorldList,
+    WorldSuitability,
     Terminate,
 }
 
@@ -35,6 +36,10 @@ fn choose_backend_and_consume(packet: &mut Packet) -> Destination {
             debug!("Routing to WORLDLIST_ADDR: {}", WORLDLIST_ADDR);
             Destination::WorldList
         }
+        
+        title_protocol::CHECK_WORLD_SUITABILITY => {
+            Destination::WorldSuitability
+        }
 
         _ => {
             debug!("Unknown packet type: {}, will terminate connection", opcode);
@@ -48,6 +53,7 @@ fn get_address(destination: &Destination) -> &str {
     match destination {
         Destination::JS5 => JS5_ADDR,
         Destination::WorldList => WORLDLIST_ADDR,
+        Destination::WorldSuitability => "world_suitability",
         Destination::Terminate => unreachable!(), // This should never be called
     }
 }
@@ -94,6 +100,14 @@ async fn handle_proxy_client(client_stream: TcpStream) -> Result<(), Box<dyn Err
 
     // Get the backend address for the destination
     let backend_addr = get_address(&destination);
+    
+    if (backend_addr == "world_suitability") {
+        client_conn.outbound.p1(101);
+        client_conn.outbound.p2(15);
+        try_write_packet(&mut client_conn).await;
+        return Ok(());
+    }
+    
     debug!("Routing client {} to backend: {}", client_addr, backend_addr);
 
     // Connect to the chosen backend

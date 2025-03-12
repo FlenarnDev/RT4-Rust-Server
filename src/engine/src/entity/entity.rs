@@ -28,9 +28,9 @@ impl Entity {
         }
     }
     
-    pub fn update_lifecycle(&self, tick: u32) -> bool {
-        self.lifecycle_tick == tick.try_into().unwrap() && self.lifecycle == EntityLifeCycle::Forever
-    }
+    /*pub fn update_lifecycle(&self, tick: u32) -> bool {
+        //self.lifecycle_tick == tick..unwrap() && self.lifecycle == EntityLifeCycle::Forever
+    }*/
     
     pub fn check_lifecycle(&self, tick: u32) -> bool {
         if self.lifecycle == EntityLifeCycle::Forever {
