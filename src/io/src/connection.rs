@@ -25,7 +25,7 @@ impl Connection {
     }
 
     /// Read data from stream into inbound packet
-    pub async fn read_packet(&mut self) -> Result<usize, std::io::Error> {
+    pub async fn read_packet(&mut self) -> Result<usize, Error> {
         self.inbound.position = 0;
 
         let mut buffer = vec![0u8; BUFFER_SIZE];
@@ -40,7 +40,7 @@ impl Connection {
     }
 
     /// Write data from outbound packet to stream
-    pub async fn write_packet(&mut self) -> Result<usize, std::io::Error> {
+    pub async fn write_packet(&mut self) -> Result<usize, Error> {
         let bytes_written = self.stream.write(&self.outbound.data[0..self.outbound.position]).await?;
         self.stream.flush().await?;  // Ensure data is sent immediately
 
@@ -62,12 +62,12 @@ impl Connection {
     }
 
     /// Get peer address
-    pub fn peer_addr(&self) -> Result<std::net::SocketAddr, std::io::Error> {
+    pub fn peer_addr(&self) -> Result<std::net::SocketAddr, Error> {
         self.stream.peer_addr()
     }
 
     /// Shutdown the connection
-    pub async fn shutdown(&mut self) -> Result<(), std::io::Error> {
+    pub async fn shutdown(&mut self) -> Result<(), Error> {
         self.stream.shutdown().await
     }
 

@@ -73,6 +73,7 @@ fn initialize_cache() -> Result<(), Box<dyn error::Error>> {
         archive_id += 1;
     }
 
+    // Handle the master index data separately.
     for group_id in 0..master_index.entries.len() {
         total_entries += 1;
         match cache.store.read(ARCHIVESET, group_id as u32) {

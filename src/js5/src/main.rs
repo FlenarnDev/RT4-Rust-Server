@@ -64,7 +64,7 @@ async fn handle_js5_client(stream: TcpStream) -> Result<(), Box<dyn Error>> {
                         connection.state = ConnectionState::Connected;
 
                     } else {
-                        connection.outbound().p1(js5_out::OUT_OF_DATE);
+                        connection.outbound().p1(js5_out::CLIENT_OUT_OF_DATE);
                         connection.state = ConnectionState::Closed;
 
                     }
