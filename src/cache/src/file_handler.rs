@@ -1,55 +1,147 @@
-use std::fs;
-use std::path::Path;
-use std::cell::RefCell;
-use std::sync::Once;
-use log::{debug, error};
+use std::collections::HashMap;
+use std::env::consts::ARCH;
+use std::sync::{Arc, RwLock};
+use std::error;
+use once_cell::sync::Lazy;
+use log::{debug, error, info};
 use rs2cache::Cache;
 use rs2cache::js5_masterindex::Js5MasterIndex;
+use rs2cache::store::{StoreError, ARCHIVESET};
 
-// Using thread_local! with lazy initialization pattern
-thread_local! {
-    static CACHE_INITIALIZED: RefCell<bool> = RefCell::new(false);
-    pub static CACHE: RefCell<Option<Cache>> = RefCell::new(None);
-    pub static MASTER_INDEX_VEC: RefCell<Option<Vec<u8>>> = RefCell::new(None);
+type CacheKey = (u8, u16);
+
+struct CacheData {
+    preloaded_data: HashMap<CacheKey, Vec<u8>>,
+    master_index: Option<Vec<u8>>,
+    cache_path: String
 }
 
-// Initialize the cache in the current thread if it hasn't been initialized yet
-pub fn ensure_initialized() -> Result<(), Box<dyn std::error::Error>> {
-    let mut needs_init = false;
+static GLOBAL_CACHE_DATA: Lazy<RwLock<CacheData>> = Lazy::new(|| {
+    RwLock::new(CacheData {
+        preloaded_data: HashMap::new(),
+        master_index: None,
+        cache_path: "../../src/cacheLocal".to_string()
+    })
+});
 
-    CACHE_INITIALIZED.with(|initialized| {
-        if !*initialized.borrow() {
-            *initialized.borrow_mut() = true;
-            needs_init = true;
+static INIT: Lazy<()> = Lazy::new(|| {
+    info!("Initializing global cache");
+    match initialize_cache() {
+        Ok(_) => info!("Cache initialized successfully"),
+        Err(e) => error!("Failed to initialize cache: {}", e),
+    }
+});
+
+fn initialize_cache() -> Result<(), Box<dyn error::Error>> {
+    let cache_path = "../../src/cacheLocal";
+
+    let cache = match Cache::open(cache_path) {
+        Ok(cache) => cache,
+        Err(e) => {
+            error!("Error opening cache: {}", e);
+            return Err(format!("Failed to open cache: {}", e).into());
         }
-    });
+    };
 
-    if needs_init {
-        debug!("Initializing cache in thread: {:?}", std::thread::current().id());
+    let master_index = Js5MasterIndex::create(&cache.store);
+    let master_index_data = master_index.write();
 
-        // Open the cache
-        let cache = match Cache::open("../../src/cacheLocal") {
-            Ok(cache) => cache,
-            Err(e) => {
-                error!("Error opening cache: {}", e);
-                return Err(format!("Failed to open cache: {}", e).into());
+    let mut preloaded_data = HashMap::new();
+    let mut total_entries = 0;
+    let mut successful_loads = 0;
+    let mut failed_loads = 0;
+
+    let mut archive_id = 0;
+    for entry in &master_index.entries {
+        debug!("Preloading archive {}", archive_id);
+        let groups_count = entry.groups;
+
+        for group_id in 0..groups_count {
+            total_entries += 1;
+
+            match cache.store.read(archive_id, group_id as u32) {
+                Ok(data) => {
+                    preloaded_data.insert((archive_id, group_id as u16), data);
+                    successful_loads += 1;
+                },
+                Err(e) => {
+                    debug!("Error preloading archive {}, group {}: {}", archive_id, group_id, e);
+                    failed_loads += 1;
+                }
             }
-        };
-
-        // Generate the master index
-        let master_index_vec = Js5MasterIndex::create(&cache.store).write();
-
-        // Store in thread-local storage
-        CACHE.with(|cache_ref| {
-            *cache_ref.borrow_mut() = Some(cache);
-        });
-
-        MASTER_INDEX_VEC.with(|master_vec_ref| {
-            *master_vec_ref.borrow_mut() = Some(master_index_vec);
-        });
-
-        debug!("Cache initialized successfully in thread: {:?}", std::thread::current().id());
+        }
+        archive_id += 1;
     }
 
+    for group_id in 0..master_index.entries.len() {
+        total_entries += 1;
+        match cache.store.read(ARCHIVESET, group_id as u32) {
+            Ok(data) => {
+                preloaded_data.insert((ARCHIVESET, group_id as u16), data);
+                successful_loads += 1;
+            },
+            Err(e) => {
+                debug!("Error preloading archive {}, group {}: {}", ARCHIVESET, group_id, e);
+                failed_loads += 1;
+            }
+        }
+    }
+
+    info!("Preloaded {}/{} cache entries", successful_loads, total_entries);
+    info!("Failed to preload {}/{} cache entries", failed_loads, total_entries);
+    info!("Total memory used for cache: approximately {} MB",
+          estimate_memory_usage(&preloaded_data) / (1024 * 1024));
+
+    let mut global_data = GLOBAL_CACHE_DATA.write().unwrap();
+    global_data.preloaded_data = preloaded_data;
+    global_data.master_index = Some(master_index_data);
+    global_data.cache_path = cache_path.to_string();
+
     Ok(())
+}
+
+fn estimate_memory_usage(cache: &HashMap<CacheKey, Vec<u8>>) -> usize {
+    let mut size = size_of::<HashMap<CacheKey, Vec<u8>>>();
+
+    for (_, data) in cache {
+        size += size_of::<CacheKey>() + size_of::<Vec<u8>>() + data.len();
+    }
+
+    size
+}
+
+
+pub fn ensure_initialized() -> Result<(), Box<dyn error::Error>> {
+    Lazy::force(&INIT);
+    Ok(())
+}
+
+pub fn get_data(archive: u8, group: u16) -> Result<Vec<u8>, Box<dyn error::Error>> {
+    ensure_initialized()?;
+
+    {
+        let data_cache = GLOBAL_CACHE_DATA.read().unwrap();
+        if let Some(data) = data_cache.preloaded_data.get(&(archive, group)) {
+            return Ok(data.clone());
+        }
+    }
+
+    // This should never occur, but here for safety.
+    debug!("Data for archive {}, group {} not in preloaded cache, loading directly", archive, group);
+    let cache_path = {
+        let data_cache = GLOBAL_CACHE_DATA.read().unwrap();
+        data_cache.cache_path.clone()
+    };
+
+    let cache = Cache::open(&cache_path)?;
+    let data = cache.store.read(archive, group as u32)?;
+
+    Ok(data)
+}
+
+pub fn get_master_index() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    ensure_initialized()?;
+    let data_cache = GLOBAL_CACHE_DATA.read().unwrap();
+    data_cache.master_index.clone()
+        .ok_or_else(|| "Master index not initialized".into())
 }

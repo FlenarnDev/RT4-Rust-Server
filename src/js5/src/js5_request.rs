@@ -3,7 +3,7 @@ use std::error::Error;
 use std::thread::sleep;
 use log::debug;
 use rs2cache::store::ARCHIVESET;
-use cache::file_handler::{ensure_initialized, CACHE, MASTER_INDEX_VEC};
+use cache::file_handler::{ensure_initialized, get_data, get_master_index};
 use cache::version_trailer::VersionTrailer;
 use io::connection::Connection;
 use io::packet::Packet;
@@ -32,6 +32,8 @@ pub (crate) enum Js5Request {
 }
 
 impl Js5Request {
+    
+    
     pub fn fulfill_request(connection: &mut Connection, request: &Js5Request) -> Result<(), Box<dyn Error>> {
         debug!("Fulfilling request: {:?}", request);
 
@@ -43,35 +45,20 @@ impl Js5Request {
                 // Handle master index request
                 let mut success = false;
                 
-                MASTER_INDEX_VEC.with(|master_vec_ref| {
-                    if let Some(master_index_vec) = &*master_vec_ref.borrow() {
-                        let master_index_length = master_index_vec.len();
-                        connection.outbound = Packet::new(8 + master_index_length);
-                        connection.outbound.p1(ARCHIVESET as i32);
-                        connection.outbound.p2(ARCHIVESET as i32);
-                        connection.outbound.p1(0);
-                        debug!("Master index length: {}", master_index_length);
-                        connection.outbound.p4(master_index_length as i32);
-
-                        connection.outbound.pbytes(&master_index_vec, 0, master_index_length);
-                        success = true;
-                    }
-                });
-
-                if !success {
-                    return Err("Master index not initialized".into());
-                }
+                let master_index = get_master_index()?;
+                let master_index_length = master_index.len();
+                        
+                connection.outbound = Packet::new(8 + master_index_length);
+                connection.outbound.p1(ARCHIVESET as i32);
+                connection.outbound.p2(ARCHIVESET as i32);
+                connection.outbound.p1(0);
+                
+                debug!("Master index length: {}", master_index_length);
+                connection.outbound.p4(master_index_length as i32);
+                connection.outbound.pbytes(&master_index, 0, master_index_length);
             } else {
                 // Handle regular file request
-                let data = CACHE.with(|cache_ref| -> Result<Vec<u8>, Box<dyn Error>> {
-                    let cache_ref = cache_ref.borrow();
-                    if let Some(cache) = &*cache_ref {
-                        Ok(cache.store.read(*archive, *group as u32)?)
-                    } else {
-                        Err("Cache not initialized".into())
-                    }
-                })?;
-                
+                let data = get_data(*archive, *group)?;
                 
                 let mut data_packet = Packet::from(data);
                 let data_len = data_packet.data.len();

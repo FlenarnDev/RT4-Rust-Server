@@ -55,7 +55,7 @@ async fn handle_js5_client(stream: TcpStream) -> Result<(), Box<dyn Error>> {
                     let client_version = if !connection.inbound().is_empty() {
                         connection.inbound().g4()
                     } else {
-                        0
+                        return Err("Client sent no version packet".into());
                     };
 
                     debug!("Client version is {}", client_version);
