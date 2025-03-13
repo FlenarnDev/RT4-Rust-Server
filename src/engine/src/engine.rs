@@ -1,21 +1,27 @@
 use std::cell::{Ref, RefCell};
-use std::collections::{HashMap, HashSet};
-use std::net::TcpListener;
+use std::collections::{HashMap};
+use std::io::Read;
+use std::net::{Shutdown, TcpListener};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use log::{debug, error, info};
+use constants::login_out::login_out;
+use constants::login_out::login_out::OK;
+use constants::title_protocol::title_protocol;
+use io::client_state::ConnectionState;
+use io::rsa::rsa;
 use crate::engine_stat::EngineStat;
+use crate::entity::network_player::is_client_connected;
 use crate::entity::npc::Npc;
 use crate::entity::player::Player;
+use crate::game_connection::GameConnection;
 use crate::grid::coord_grid::CoordGrid;
 
 pub struct EngineTick {
     pub current_tick: u32,
 }
-
-
 
 impl EngineTick {
     pub fn new() -> EngineTick {
@@ -74,7 +80,6 @@ impl Engine {
                     for stream in listener.incoming() {
                         match stream {
                             Ok(stream) => {
-                                info!("New connection from: {}", stream.peer_addr().unwrap());
                                 for i in 0..100 {
                                     let player = Player::new(CoordGrid::from(3094, 0, 3106), 0);
                                     // TODO: Set player properties based on connection data
@@ -83,6 +88,25 @@ impl Engine {
                                     let mut players_lock = thread_new_players.lock().unwrap();
                                     players_lock.push(player)
                                 };
+                                let mut game_connection = GameConnection::new(stream);
+
+                                loop {
+
+                                    if game_connection.state == ConnectionState::New {
+                                        Self::on_new_connection(&mut game_connection);
+                                    }
+
+                                    debug!("Connection state: {:?}", game_connection.state);
+
+                                    if game_connection.state == ConnectionState::Login || game_connection.state == ConnectionState::Reconnect{
+                                        Self::on_login(&mut game_connection);
+                                    }
+                                    
+                                    if game_connection.state == ConnectionState::Connected {
+                                        //debug!("Connection state: {:?}", game_connection.state);
+                                    }
+                                    
+                                }
                             }
                             Err(e) => {
                                 error!("Connection failed: {}", e);
@@ -95,10 +119,6 @@ impl Engine {
                 }
             }
         });
-        
-        //let mut player: Player = Player::new(CoordGrid::from(3094, 0, 3106), 0);
-        //player.uid = 0;
-        //self.add_player(player);
         
         // TODO - load map
         info!("World ready!");
@@ -150,7 +170,6 @@ impl Engine {
     }
     
     /// - World Queue
-    /// - Calculate AFK event readiness
     /// - NPC Spawn script
     /// - NPC Hunt
     fn process_world(&mut self) {
@@ -169,9 +188,11 @@ impl Engine {
 
         self.cycle_stats[EngineStat::World as usize] = start.elapsed();
     }
-    
-    /// - Decode Packets
+
+    /// - Calculate AFK event readiness
+    /// - Process Packets
     /// - Process pathfinding/following
+    /// - Client input tracking
     fn process_in(&mut self) {
         let start: Instant = Instant::now();
         
@@ -180,6 +201,10 @@ impl Engine {
 
         for (_, player) in &self.players {
             player.borrow_mut().playtime += 1;
+            
+            if is_client_connected(&*player.borrow()) {
+                
+            }
         }
         
         // TODO - decode packets
@@ -235,7 +260,7 @@ impl Engine {
     fn process_logins(&mut self) {
         let start: Instant = Instant::now();
 
-        let mut player_to_add = {
+        let player_to_add = {
             let mut shared_players = self.new_players.lock().unwrap();
             shared_players.drain(..).collect::<Vec<Player>>()
         };
@@ -340,5 +365,171 @@ impl Engine {
             None => Err(format!("Player with uid {} not found in engine", uid)),
             Some(player_ref) => Ok(player_ref.borrow())
         }
+    }
+
+    fn on_new_connection(connection: &mut GameConnection) {
+        let start: Instant = Instant::now();
+        //debug!("New connection from: {}", connection.stream.peer_addr().unwrap());
+
+        if connection.state != ConnectionState::New {
+            debug!("Connection already established, closing");
+            connection.shutdown();
+            return
+        }
+
+        connection.read_packet().expect(
+            "Failed to read packet from new connection");
+
+        if connection.inbound.remaining() < 1 {
+            debug!("Connection closed, no data received");
+            connection.shutdown();
+            return
+        }
+
+        connection.opcode = connection.inbound().g1() as i32;
+
+        if connection.opcode == title_protocol::INIT_GAME_CONNECTION {
+            // Used to load-balance.
+            let username_hash = connection.inbound().g1();
+            connection.outbound.p1(0);
+
+            // Server session key for this connection, used in decrypting return values.
+            let session_key: u64 = ((rand::random::<f64>() * 99999999.0) as u64) << 32 | ((rand::random::<f64>() * 99999999.0) as u64);
+            connection.outbound.p8(session_key as i64);
+            connection.write_packet().expect("Failed to write packet to new connection");
+            connection.state = ConnectionState::Login
+        }  else if connection.opcode == title_protocol::RECONNECT {
+            connection.state = ConnectionState::Reconnect;
+        } else if connection.opcode == title_protocol::LOGIN {
+            connection.state = ConnectionState::Login;
+        } else {
+            connection.outbound.p1(login_out::INVALID_LOGIN_PACKET);
+            connection.write_packet().expect("Failed to write packet to new connection");
+            connection.shutdown();
+            return
+        }
+        debug!("Process new connection in: {:?}", start.elapsed());
+    }
+
+    fn on_login(connection: &mut GameConnection) {
+        let start: Instant = Instant::now();
+
+        if connection.state != ConnectionState::Login && connection.state != ConnectionState::Reconnect {
+            connection.outbound.p1(login_out::INVALID_LOGIN_PACKET);
+            connection.write_packet().expect("Failed to write packet to new connection");
+            connection.shutdown();
+            return
+        }
+
+        connection.read_packet().unwrap();
+
+        if connection.inbound.remaining() < 1 {
+            connection.outbound.p1(login_out::INVALID_LOGIN_PACKET);
+            connection.write_packet().expect("Failed to write packet to new connection");
+            connection.shutdown();
+            debug!("Connection closed, no data received");
+            return
+        }
+
+        connection.opcode = connection.inbound().g1() as i32;
+
+        if connection.opcode != title_protocol::LOGIN && connection.opcode != title_protocol::RECONNECT {
+            connection.outbound.p1(login_out::INVALID_LOGIN_PACKET);
+            connection.write_packet().expect("Failed to write packet to new connection");
+            connection.shutdown();
+            return
+        }
+
+        debug!("Opcode during login: {}", connection.opcode);
+
+
+        let login_packet_length = connection.inbound().g2();
+
+        let client_version = connection.inbound().g4();
+
+        if client_version != 530 {
+            connection.outbound.p1(login_out::CLIENT_OUT_OF_DATE);
+            connection.write_packet().expect("Failed to write packet to new connection");
+            connection.shutdown();
+            return
+        } else {
+            debug!("Client version: {}", client_version)
+        }
+
+        let bytes1 = connection.inbound().g1b();
+        debug!("Bytes1: {}", bytes1);
+        let adverts_suppressed = connection.inbound().g1b();
+        debug!("Adverts suppressed: {}", adverts_suppressed);
+        let client_signed = connection.inbound().g1b();
+        debug!("Client signed: {}", client_signed);
+        let display_mode = connection.inbound().g1b();
+        debug!("Display mode: {}", display_mode);
+        let canvas_width = connection.inbound().g2();
+        debug!("Canvas width: {}", canvas_width);
+        let canvas_height = connection.inbound().g2();
+        debug!("Canvas height: {}", canvas_height);
+        let anti_aliasing = connection.inbound().g1b();
+        debug!("Anti aliasing: {}", anti_aliasing);
+        let uid = connection.inbound().gbytes(24);
+        debug!("UID: {:?}", uid);
+        let site_settings_cookie = connection.inbound().gjstr(0);
+        debug!("Site settings cookie: {}", site_settings_cookie);
+        let affiliate_id = connection.inbound().g4();
+        debug!("Affiliate ID: {}", affiliate_id);
+        let detail_options = connection.inbound().g4();
+        debug!("Detail options: {}", detail_options);
+        let verify_id = connection.inbound().g2();
+        debug!("Verify ID: {}", verify_id);
+
+        let mut checksums = [0u32; 28];
+
+        for i in 0..28 {
+            checksums[i] = connection.inbound().g4() as u32;
+            debug!("Checksum {}: {}", i, checksums[i]);
+        }
+
+        let rsa_block_length = connection.inbound().g1();
+        debug!("RSA block length: {}", rsa_block_length);
+        let mut rsa_packet_decrypted = rsa::decrypt_rsa_block(connection.inbound.clone(), rsa_block_length as usize);
+
+        let rsa_verification = rsa_packet_decrypted.g1();
+        if rsa_verification != 10 {
+            debug!("RSA verification failed, value: {}", rsa_verification);
+            connection.outbound.p1(login_out::INVALID_LOGIN_PACKET);
+            connection.write_packet().expect("Failed to write packet to new connection");
+            connection.shutdown();
+            return
+        }
+
+        let temp1 = rsa_packet_decrypted.g4();
+        let temp2 = rsa_packet_decrypted.g4();
+        let temp3 = rsa_packet_decrypted.g4();
+        let temp4 = rsa_packet_decrypted.g4();
+
+        let temp5 = rsa_packet_decrypted.g4();
+        let temp6 = rsa_packet_decrypted.g4();
+
+        let password = rsa_packet_decrypted.gjstr(0);
+        debug!("Password: {}", password);
+
+        
+        if connection.opcode == title_protocol::RECONNECT {
+            connection.outbound.p1(15)
+        } else if connection.opcode == title_protocol::LOGIN {
+            connection.outbound.p1(OK);
+            connection.outbound.p1(2); // Staff mod level
+            connection.outbound.p1(0);
+            connection.outbound.p1(0);
+            connection.outbound.p1(0);
+            connection.outbound.p1(0);
+            connection.outbound.p1(0);
+            connection.outbound.p1(0);
+            connection.outbound.p2(1);
+            connection.outbound.p1(1);
+            connection.outbound.p1(1);
+        }
+        connection.write_packet().expect("Failed to write packet to new connection");
+        debug!("Process login in: {:?}", start.elapsed());
+        connection.state = ConnectionState::Connected
     }
 }
