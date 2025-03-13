@@ -75,13 +75,14 @@ impl Engine {
                         match stream {
                             Ok(stream) => {
                                 info!("New connection from: {}", stream.peer_addr().unwrap());
-                                let player = Player::new(CoordGrid::from(3094, 0, 3106), 0);
-                                // TODO: Set player properties based on connection data
+                                for i in 0..100 {
+                                    let player = Player::new(CoordGrid::from(3094, 0, 3106), 0);
+                                    // TODO: Set player properties based on connection data
 
-                                // Add to new_players queue
-                                let mut players_lock = thread_new_players.lock().unwrap();
-                                players_lock.push(player);
-                                
+                                    // Add to new_players queue
+                                    let mut players_lock = thread_new_players.lock().unwrap();
+                                    players_lock.push(player)
+                                };
                             }
                             Err(e) => {
                                 error!("Connection failed: {}", e);
@@ -135,9 +136,10 @@ impl Engine {
             self.last_cycle_stats[EngineStat::Cleanup as usize] = self.cycle_stats[EngineStat::Cleanup as usize];
             
             info!(
-                "Tick: {} took: {:?}",
+                "Tick: {} took: {:?} with: {} players",
                 self.current_tick.current_tick,
-                self.cycle_stats[EngineStat::Cycle as usize]
+                self.cycle_stats[EngineStat::Cycle as usize],
+                self.players.len()
             );
             
             // Cycle the world now
@@ -178,7 +180,6 @@ impl Engine {
 
         for (_, player) in &self.players {
             player.borrow_mut().playtime += 1;
-            debug!("Player playtime: {}", player.borrow().playtime);
         }
         
         // TODO - decode packets
@@ -216,7 +217,6 @@ impl Engine {
             let _: Ref<Player> = player.borrow();
             // TODO
         }
-        debug!("Players: {}", self.players.len());
         self.cycle_stats[EngineStat::Players as usize] = start.elapsed();
     }
     
@@ -235,11 +235,10 @@ impl Engine {
     fn process_logins(&mut self) {
         let start: Instant = Instant::now();
 
-        let mut player_to_add: Vec<Player> = Vec::new();
-        {
-            let mut shared_player = self.new_players.lock().unwrap();
-            player_to_add.append(&mut shared_player);
-        }
+        let mut player_to_add = {
+            let mut shared_players = self.new_players.lock().unwrap();
+            shared_players.drain(..).collect::<Vec<Player>>()
+        };
         
         for player in player_to_add {
             // Prevent logging in if a player save is being flushed
@@ -260,13 +259,14 @@ impl Engine {
             // Check if pid available, otherwise force disconnect, world full.
             // TODO
             
-            pid = self.players.len() as i32 + 1;
+            pid = (self.players.len() + 1) as i32;
             //let player = player.into_inner();
             //player.pid = pid; TODO
             self.players.insert(pid, RefCell::new(player));
         }
         self.new_players.lock().unwrap().clear();
         self.cycle_stats[EngineStat::Logins as usize] = start.elapsed();
+        debug!("Processed logins in: {:?}", self.cycle_stats[EngineStat::Logins as usize])
     }
     
     /// Build list of active zones around players
