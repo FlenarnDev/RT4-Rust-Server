@@ -1,3 +1,4 @@
+use std::io::Error;
 use log::{debug, error};
 use constants::proxy::proxy::BUFFER_SIZE;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -81,15 +82,12 @@ impl Connection {
 pub async fn try_write_packet(connection: &mut Connection) {
     if !connection.outbound.is_empty() {
         match connection.write_packet().await {
-            Ok(bytes_written) => {
-                debug!("Sent response packet: {} bytes", bytes_written);
-
-            },
             Err(e) => {
                 error!("Error writing to client: {}", e);
                 connection.state = ConnectionState::Closed;
 
             }
+            _ => {}
         }
     }
 }
