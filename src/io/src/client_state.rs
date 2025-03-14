@@ -6,4 +6,5 @@ pub enum ConnectionState {
     Reconnect,
     Logout,
     Closed,
+    Null,
 }

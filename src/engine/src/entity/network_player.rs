@@ -2,22 +2,45 @@ use crate::entity::player::Player;
 use crate::game_connection::GameConnection;
 
 pub struct NetworkPlayer {
-    player: Player,
-    client: Box<GameConnection>,
+    pub(crate) player: Player,
+    pub(crate) connection: GameConnection,
     /// User packet limit
-    user_limit: u8, 
+    pub(crate) user_limit: u8,
     /// Client packet limit
-    client_limit: u8,
-    restricted_limit: u8,
-    
-    user_patch: Vec<i32>,
-    opcalled: bool,
+    pub(crate) connection_limit: u8,
+    pub restricted_limit: u8,
+
+    pub user_path: Vec<i32>,
+    pub op_called: bool,
 }
 
-pub fn is_client_connected(player: &Player) -> bool {
-    if let Some(network_player) = player.as_any().downcast_ref::<NetworkPlayer>() {
-        !network_player.client.is_connection_active()
-    } else {
-        false
+impl NetworkPlayer {
+    pub fn new(player: Player, connection: &mut Option<GameConnection>) -> NetworkPlayer {
+        NetworkPlayer {
+            player,
+            connection: GameConnection::take_ownership(connection),
+            user_limit: 0,
+            connection_limit: 0,
+            restricted_limit: 0,
+            user_path: vec![],
+            op_called: false,
+        }
+    }
+
+    pub fn with_connection(player: Player, connection: GameConnection) -> NetworkPlayer {
+        NetworkPlayer {
+            player,
+            connection,
+            user_limit: 0,
+            connection_limit: 0,
+            restricted_limit: 0,
+            user_path: Vec::with_capacity(4),
+            op_called: false,
+        }
+    }
+
+    pub fn is_client_connected(self: &Self) -> bool {
+        self.connection.is_connection_active()
     }
 }
+
