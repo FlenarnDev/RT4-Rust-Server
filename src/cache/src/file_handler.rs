@@ -78,7 +78,7 @@ fn initialize_cache() -> Result<(), Box<dyn error::Error>> {
                 preloaded_data.insert((ARCHIVESET, group_id as u16), data);
                 successful_loads += 1;
             },
-            Err(e) => {
+            Err(_e) => {
                 failed_loads += 1;
             }
         }
@@ -150,7 +150,7 @@ pub fn get_data(archive: u8, group: u16) -> Result<Vec<u8>, Box<dyn error::Error
     Ok(data)
 }
 
-pub fn get_master_index() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+pub fn get_master_index() -> Result<Vec<u8>, Box<dyn error::Error>> {
     ensure_initialized()?;
     let data_cache = GLOBAL_CACHE_DATA.read().unwrap();
     data_cache.master_index.clone()
