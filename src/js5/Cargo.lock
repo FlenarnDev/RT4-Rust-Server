@@ -407,6 +407,7 @@ version = "0.1.0"
 dependencies = [
  "constants",
  "criterion",
+ "lazy_static",
  "log",
  "num-bigint",
  "tokio",

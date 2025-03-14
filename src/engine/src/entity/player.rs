@@ -1,4 +1,3 @@
-use std::any::Any;
 use crate::entity::block_walk::BlockWalk;
 use crate::entity::entity::Entity;
 use crate::entity::entity_lifecycle::EntityLifeCycle;
@@ -28,10 +27,6 @@ pub struct Player {
 }
 
 impl Player {
-    pub(crate) fn as_any(&self) -> &dyn Any {
-        self
-    }
-    
     pub fn new(coord: CoordGrid, gender: u8, pid: i32) -> Player {
         Player {
             entity: Entity::new(
@@ -55,3 +50,4 @@ impl Player {
         }
     }
 }
+

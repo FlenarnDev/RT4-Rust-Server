@@ -2,20 +2,18 @@ use std::io::ErrorKind;
 use std::io::{Read, Write};
 use constants::proxy::proxy::BUFFER_SIZE;
 use std::net::{Shutdown, TcpStream};
-use uuid::Uuid;
 use io::client_state::ConnectionState;
 use io::isaac::Isaac;
 use io::packet::Packet;
-use std::convert::TryFrom;
 
-pub struct GameConnection {
+pub struct GameClient {
     pub stream: Option<TcpStream>,
     pub inbound: Packet,
     pub outbound: Packet,
     pub state: ConnectionState,
     total_bytes_read: usize,
     total_bytes_written: usize,
-    encryptor: Option<Isaac>,
+    pub(crate) encryptor: Option<Isaac>,
     decryptor: Option<Isaac>,
     /// Current opcode being read.
     pub opcode: i32,
@@ -24,7 +22,7 @@ pub struct GameConnection {
     read_buffer: Vec<u8>,
 }
 
-impl GameConnection {
+impl GameClient {
     pub fn new(stream: TcpStream) -> Self {
         Self {
             stream: Some(stream),
@@ -173,8 +171,8 @@ impl GameConnection {
     }
 
     // Take ownership of a connection
-    pub fn take_ownership(connection: &mut Option<GameConnection>) -> GameConnection {
-        connection.take().unwrap_or_else(|| GameConnection::new_dummy())
+    pub fn take_ownership(connection: &mut Option<GameClient>) -> GameClient {
+        connection.take().unwrap_or_else(|| GameClient::new_dummy())
     }
 
     // Optimized method to take just the stream from a connection

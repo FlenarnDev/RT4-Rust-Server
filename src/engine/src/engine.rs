@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::{HashMap};
-use std::net::TcpListener;
+use std::net::{IpAddr, TcpListener};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::sleep;
@@ -12,15 +12,12 @@ use constants::title_protocol::title_protocol;
 use io::client_state::ConnectionState;
 use io::rsa::rsa;
 use crate::engine_stat::EngineStat;
+use crate::entity::entity_list::NetworkPlayerList;
 use crate::entity::network_player::NetworkPlayer;
 use crate::entity::npc::Npc;
 use crate::entity::player::Player;
-use crate::game_connection::GameConnection;
+use crate::game_connection::GameClient;
 use crate::grid::coord_grid::CoordGrid;
-
-pub struct EngineTick {
-    pub current_tick: i32,
-}
 
 pub struct Engine {
     pub members: bool,
@@ -30,7 +27,7 @@ pub struct Engine {
     // TODO - ops?
     pub cycle_stats: Vec<Duration>,
     pub last_cycle_stats: Vec<Duration>,
-    pub players: HashMap<i32, RefCell<NetworkPlayer>>,
+    pub players: NetworkPlayerList,
     pub npcs: HashMap<i32, RefCell<Npc>>,
     pub new_players: Arc<Mutex<Vec<NetworkPlayer>>>,
     // TODO - game_map
@@ -43,6 +40,8 @@ impl Engine {
 
     const TIMEOUT_NO_CONNECTION: i32 = 50;
     const TIMEOUT_NO_RESPONSE: i32 = 100;
+
+    const AFK_EVENTRATE: i32 = 500;
     
     pub fn new() -> Engine {
         Engine { 
@@ -51,7 +50,7 @@ impl Engine {
             tick_rate: Duration::from_millis(600),
             cycle_stats: vec![Duration::new(0, 0); 12],
             last_cycle_stats: vec![Duration::new(0, 0); 12],
-            players: HashMap::with_capacity(Engine::MAX_PLAYERS - 1),
+            players: NetworkPlayerList::new(Engine::MAX_PLAYERS - 1),
             npcs: HashMap::with_capacity(Engine::MAX_NPCS - 1),
             new_players: Default::default(),
         }
@@ -76,7 +75,7 @@ impl Engine {
                                 let thread_player = Arc::clone(&thread_new_players);
 
                                 thread::spawn(move || {
-                                    let mut game_connection = GameConnection::new(stream);
+                                    let mut game_connection = GameClient::new(stream);
 
                                     loop {
                                         if game_connection.state == ConnectionState::New && game_connection.is_connection_active() {
@@ -148,7 +147,7 @@ impl Engine {
                 "Tick: {} took: {:?} with: {} player(s)",
                 self.current_tick,
                 self.cycle_stats[EngineStat::Cycle as usize],
-                self.players.len()
+                self.players.count()
             );
             
             // Cycle the world now
@@ -188,18 +187,20 @@ impl Engine {
         // TODO - separate out stat?
         //self.cycle_stats[EngineStat::BandwidthIn as usize] = 0;
 
-        for (pid, player) in &self.players {
-            player.borrow_mut().player.playtime += 1;
+        self.players.for_each_mut(|network_player| {
+            network_player.player.playtime += 1;
 
-            debug!("Player with PID: {} is connected: {}", pid, player.borrow().is_client_connected());
-        }
+            if network_player.is_client_connected()  {
+                if network_player.decode_in(self.current_tick) {
+
+                }
+            }
+        });
         
         // TODO - decode packets
         
         // TODO - process pathfinding/following
         self.cycle_stats[EngineStat::ClientsIn as usize] = start.elapsed();
-        
-        
     }
     
     /// Resume suspended script
@@ -238,10 +239,7 @@ impl Engine {
     /// Close interface if attempting to logout
     fn process_players(&mut self) {
         let start: Instant = Instant::now();
-        for (pid, player) in &self.players {
-
-            // TODO
-        }
+        
         self.cycle_stats[EngineStat::Players as usize] = start.elapsed();
     }
     
@@ -250,34 +248,34 @@ impl Engine {
         let start: Instant = Instant::now();
 
         let mut pids_to_remove = Vec::new();
-        for (pid, network_player) in &self.players {
-            let player = &mut network_player.borrow_mut().player;
-
+        self.players.for_each_mut(|network_player| {
             let mut force: bool = false;
 
-            if self.current_tick - player.last_response >= Self::TIMEOUT_NO_RESPONSE {
+            if self.current_tick - network_player.player.last_response >= Self::TIMEOUT_NO_RESPONSE {
                 // X-logged / timed out for 60s: force logout.
-                player.logging_out = true;
+                debug!("X-logged");
+                network_player.player.logging_out = true;
                 force = true;
-            } else if self.current_tick - player.last_connected >= Self::TIMEOUT_NO_CONNECTION {
+            } else if self.current_tick - network_player.player.last_connected >= Self::TIMEOUT_NO_CONNECTION {
                 // Connection lost for 30s: request idle logout.
-                player.request_idle_logout = true;
+                debug!("idle log");
+                network_player.player.request_idle_logout = true;
             }
 
-            if player.request_logout || player.request_idle_logout {
-                if self.current_tick >= player.prevent_logout_until {
-                    player.logging_out = true;
+            if network_player.player.request_logout || network_player.player.request_idle_logout {
+                if self.current_tick >= network_player.player.prevent_logout_until {
+                    network_player.player.logging_out = true;
                 }
-                player.request_logout = false;
-                player.request_idle_logout = false;
-            }
-            
-            if (player.logging_out) && (force || self.current_tick >= player.prevent_logout_until) {
-                pids_to_remove.push(*pid);
+                network_player.player.request_logout = false;
+                network_player.player.request_idle_logout = false;
             }
 
-            // TODO
-        }
+            if (network_player.player.logging_out) && (force || self.current_tick >= network_player.player.prevent_logout_until) {
+                pids_to_remove.push(network_player.player.pid);
+            }
+        }) ;
+        
+        // TODO
         
         for pid in pids_to_remove {
             self.remove_player(pid)
@@ -297,7 +295,7 @@ impl Engine {
             shared_players.drain(..).collect::<Vec<NetworkPlayer>>()
         };
         
-        for player in player_to_add {
+        for mut player in player_to_add {
             debug!("Adding player!");
             // Prevent logging in if a player save is being flushed
             // TODO
@@ -306,21 +304,19 @@ impl Engine {
             // TODO
             
             // Player already logged in
-            for (_, other_player) in &self.players {
+            //for (_, other_player) in &self.players {
                 // TODO
-            }
+            //}
             
             // Prevent logging in when the server is shutting down.
             // TODO
             
-            let pid: i32;
             // Check if pid available, otherwise force disconnect, world full.
             // TODO
+            let pid = self.get_next_pid(Some(&player.client));
+            player.player.pid = pid;
+            self.players.set(pid as usize, player).expect("Failed to set player!");
             
-            pid = 12 as i32;
-            //let player = player.into_inner();
-            //player.pid = pid; TODO
-            self.players.insert(pid, RefCell::new(player));
         }
         self.new_players.lock().unwrap().clear();
         self.cycle_stats[EngineStat::Logins as usize] = start.elapsed();
@@ -348,10 +344,10 @@ impl Engine {
     /// Compute npc info
     fn process_info(&self) {
         // TODO - add benchmark value for this?
-        for (_, player) in &self.players {
-            let _: Player = player.borrow().player;
+        //for (_, player) in &self.players {
+            //let _: Player = player.borrow().player;
             // TODO
-        }
+       // }
         // TODO
     }
     
@@ -372,9 +368,9 @@ impl Engine {
     /// Flush packets
     fn process_out(&mut self) {
         let start: Instant = Instant::now();
-        for (pid, player) in &self.players {
+        //for (pid, player) in &self.players {
             // TODO
-        }
+        //}
         self.cycle_stats[EngineStat::ClientsOut as usize] = start.elapsed();
     }
     
@@ -394,10 +390,10 @@ impl Engine {
         // TODO
         
         // Reset players
-        for (pid, player) in &self.players {
-            let _: Player = player.borrow().player;
+        //for (pid, player) in &self.players {
+            //let _: Player = player.borrow().player;
             // TODO
-        }
+        //}
         // Reset npcs
         // TODO
         // Reset inventories
@@ -417,23 +413,22 @@ impl Engine {
     }*/
     
     pub fn remove_player(&mut self, pid: i32) {
-        debug!("PID! {}", pid);
+        debug!("PID of player to be removed {}", pid);
         if pid == -1 {
             return;
         }
-
-        if let Some(player_ref) = self.players.get(&pid) {
-            let mut player = player_ref.borrow_mut();
-            if player.is_client_connected() {
-                player.connection.shutdown();
+        
+        if let Some(mut player_ref) = self.players.get_mut(pid as usize) {
+            if player_ref.is_client_connected() {
+                player_ref.client.shutdown();
             }
 
-            player.player.entity.active = false;
+            player_ref.player.entity.active = false;
         }
-        self.players.remove(&pid);
+        self.players.remove(pid as usize);
     }
 
-    fn on_new_connection(connection: &mut GameConnection, thread_player: Arc<Mutex<Vec<NetworkPlayer>>>) {
+    fn on_new_connection(connection: &mut GameClient, thread_player: Arc<Mutex<Vec<NetworkPlayer>>>) {
         let start: Instant = Instant::now();
 
         connection.read_packet_with_size(1).unwrap();
@@ -547,7 +542,7 @@ impl Engine {
 
             let mut option_connection = Some(std::mem::replace(
                 connection,
-                GameConnection::new_dummy()
+                GameClient::new_dummy()
             ));
 
             let player = Player::new(CoordGrid::from(3094, 0, 3106), 0, 12);
@@ -565,5 +560,54 @@ impl Engine {
             return
         }
         debug!("[on_new_connection] took: {:?}", start.elapsed());
+    }
+
+    fn get_next_pid(&self, client: Option<&GameClient>) -> i32 {
+        // Default case - no client or any error case
+        let default = || self.players.next(false, None).unwrap_or(0) as i32;
+
+        // Early return if no client
+        let client = match client {
+            Some(c) => c,
+            None => return default(),
+        };
+
+        // Early return if no stream
+        let stream = match &client.stream {
+            Some(s) => s,
+            None => return default(),
+        };
+
+        // Early return if can't get peer address
+        let peer_addr = match stream.peer_addr() {
+            Ok(addr) => addr,
+            Err(_) => return default(),
+        };
+
+        // Handle different IP types
+        match peer_addr.ip() {
+            IpAddr::V4(ipv4) => {
+                let last_octet = ipv4.octets()[3];
+                let start = (last_octet % 20) as usize * 100;
+                self.players.next(true, Some(start)).unwrap_or(0) as i32
+            },
+            IpAddr::V6(ipv6) => {
+                // Create a longer-lived String first
+                let ip_string = ipv6.to_string();
+                let third_segment = ip_string.split(':').nth(2);
+
+                if let Some(segment) = third_segment {
+                    if segment.is_empty() {
+                        return default();
+                    }
+
+                    let segment_value = i32::from_str_radix(segment, 16).unwrap_or(0);
+                    let start = (segment_value % 20) as usize * 100;
+                    self.players.next(true, Some(start)).unwrap_or(0) as i32
+                } else {
+                    default()
+                }
+            }
+        }
     }
 }

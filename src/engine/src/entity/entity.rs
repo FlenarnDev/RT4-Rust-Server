@@ -1,4 +1,3 @@
-use crate::engine::Engine;
 use crate::entity::entity_lifecycle::EntityLifeCycle;
 use crate::grid::coord_grid::CoordGrid;
 
@@ -15,7 +14,6 @@ pub struct Entity {
 }
 
 impl Entity {
-
     pub fn new(coord: CoordGrid, width: u8, length: u8, lifecycle: EntityLifeCycle) -> Self {
         Entity {
             coord,
@@ -52,6 +50,10 @@ impl Entity {
        // TODO
     }
     
+}
+
+pub trait EntityExt {
+    fn id(&self) -> usize;
 }
 
 pub trait PathingEntity{}

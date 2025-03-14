@@ -18,3 +18,4 @@ mod hittype;
 mod interaction;
 mod npc_mode;
 pub mod network_player;
+pub mod entity_list;
