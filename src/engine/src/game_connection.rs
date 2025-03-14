@@ -30,7 +30,7 @@ impl GameConnection {
         Self {
             stream,
             inbound: Packet::new(BUFFER_SIZE),
-            outbound: Packet::new(BUFFER_SIZE),
+            outbound: Packet::new(1),
             state: ConnectionState::New,
             uuid: Uuid::new_v4(),
             total_bytes_read: 0,

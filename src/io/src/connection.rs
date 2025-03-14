@@ -19,7 +19,7 @@ impl Connection {
         Self {
             stream,
             inbound: Packet::new(BUFFER_SIZE),
-            outbound: Packet::new(BUFFER_SIZE),
+            outbound: Packet::new(1),
             state: ConnectionState::New,
         }
     }
