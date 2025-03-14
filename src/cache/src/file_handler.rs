@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::env::consts::ARCH;
 use std::sync::{Arc, RwLock};
 use std::error;
+use std::time::Instant;
 use once_cell::sync::Lazy;
 use log::{debug, error, info};
 use rs2cache::Cache;
@@ -18,7 +19,7 @@ struct CacheData {
 
 static GLOBAL_CACHE_DATA: Lazy<RwLock<CacheData>> = Lazy::new(|| {
     RwLock::new(CacheData {
-        preloaded_data: HashMap::new(),
+        preloaded_data: HashMap::with_capacity(67551),
         master_index: None,
         cache_path: "../../src/cacheLocal".to_string()
     })
@@ -33,6 +34,7 @@ static INIT: Lazy<()> = Lazy::new(|| {
 });
 
 fn initialize_cache() -> Result<(), Box<dyn error::Error>> {
+    let start = Instant::now();
     let cache_path = "../../src/cacheLocal";
 
     let cache = match Cache::open(cache_path) {
@@ -46,50 +48,55 @@ fn initialize_cache() -> Result<(), Box<dyn error::Error>> {
     let master_index = Js5MasterIndex::create(&cache.store);
     let master_index_data = master_index.write();
 
-    let mut preloaded_data = HashMap::new();
+    let mut preloaded_data = HashMap::with_capacity(67551);
     let mut total_entries = 0;
     let mut successful_loads = 0;
     let mut failed_loads = 0;
 
-    let mut archive_id = 0;
-    for entry in &master_index.entries {
-        debug!("Preloading archive {}", archive_id);
+    for (archive_id, entry) in master_index.entries.iter().enumerate() {
         let groups_count = entry.groups;
-
+        total_entries += groups_count;
         for group_id in 0..groups_count {
-            total_entries += 1;
-
-            match cache.store.read(archive_id, group_id as u32) {
+            match cache.store.read(archive_id as u8, group_id as u32) {
                 Ok(data) => {
-                    preloaded_data.insert((archive_id, group_id as u16), data);
+                    preloaded_data.insert((archive_id as u8, group_id as u16), data);
                     successful_loads += 1;
                 },
-                Err(e) => {
-                    debug!("Error preloading archive {}, group {}: {}", archive_id, group_id, e);
+                Err(_) => {
                     failed_loads += 1;
                 }
             }
         }
-        archive_id += 1;
     }
 
     // Handle the master index data separately.
-    for group_id in 0..master_index.entries.len() {
-        total_entries += 1;
+    let master_index_entries_len = master_index.entries.len();
+    total_entries += master_index_entries_len;
+    for group_id in 0..master_index_entries_len {
         match cache.store.read(ARCHIVESET, group_id as u32) {
             Ok(data) => {
                 preloaded_data.insert((ARCHIVESET, group_id as u16), data);
                 successful_loads += 1;
             },
             Err(e) => {
-                debug!("Error preloading archive {}, group {}: {}", ARCHIVESET, group_id, e);
                 failed_loads += 1;
             }
         }
     }
 
-    info!("Preloaded {}/{} cache entries", successful_loads, total_entries);
-    info!("Failed to preload {}/{} cache entries", failed_loads, total_entries);
+    info!("Preloaded cache in {:?}", start.elapsed());
+    info!(
+        "Preloaded {}/{} cache entries ({:.2}%)",
+        successful_loads,
+        total_entries,
+        (successful_loads as f64 / total_entries as f64) * 100.0
+    );
+    info!(
+        "Failed to preload {}/{} cache entries ({:.2}%)",
+        failed_loads,
+        total_entries,
+        (failed_loads as f64 / total_entries as f64) * 100.0
+    );
     info!("Total memory used for cache: approximately {} MB",
           estimate_memory_usage(&preloaded_data) / (1024 * 1024));
 
@@ -136,6 +143,9 @@ pub fn get_data(archive: u8, group: u16) -> Result<Vec<u8>, Box<dyn error::Error
 
     let cache = Cache::open(&cache_path)?;
     let data = cache.store.read(archive, group as u32)?;
+
+    let mut preloaded_data = GLOBAL_CACHE_DATA.write().unwrap();
+    preloaded_data.preloaded_data.insert((archive, group), data.clone());
 
     Ok(data)
 }
