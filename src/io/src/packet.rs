@@ -327,27 +327,13 @@ impl Packet {
 
     #[inline(always)]
     pub fn g4(&mut self) -> i32 {
-        // Bounds check with branch prediction hint
-        if likely!(self.position + 3 < self.data.len()) {
-            let pos = self.position;
-            self.position += 4;
+        let pos = self.position;
+        self.position += 4;
 
-            ((self.data[pos] as i32) << 24) |
-                ((self.data[pos + 1] as i32) << 16) |
-                ((self.data[pos + 2] as i32) << 8) |
-                (self.data[pos + 3] as i32)
-        } else {
-            // Handle partial reads
-            let mut result = 0;
-            let bytes_available = self.data.len().saturating_sub(self.position);
-
-            for i in 0..bytes_available {
-                result |= (self.data[self.position + i] as i32) << (8 * (3 - i));
-            }
-
-            self.position = self.data.len();
-            result
-        }
+        ((self.data[pos] as i32) << 24) |
+            ((self.data[pos + 1] as i32) << 16) |
+            ((self.data[pos + 2] as i32) << 8) |
+            (self.data[pos + 3] as i32)
     }
 
     #[inline(always)]
@@ -379,6 +365,14 @@ impl Packet {
             self.position = self.data.len();
             i32::from_le_bytes(bytes)
         }
+    }
+
+    #[inline(always)]
+    pub fn g8(&mut self) -> i64 {
+        let high = self.g4() as i64;
+        let low = self.g4() as i64;
+
+        (high << 32) + low
     }
 
     #[inline(always)]
