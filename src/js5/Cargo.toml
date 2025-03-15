@@ -12,6 +12,6 @@ env_logger = "0.11.6"
 io = { path = "../io" }
 cache = { path = "../cache" }
 constants = { path = "../constants" }
-rs2-cache = "0.3.0"
+rs2-cache = { path = "../../../rs2-cache/rust" }
 
 

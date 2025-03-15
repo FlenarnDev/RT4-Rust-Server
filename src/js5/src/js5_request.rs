@@ -1,10 +1,8 @@
 use std::cmp::min;
 use std::error::Error;
-use std::thread::sleep;
 use log::debug;
 use rs2cache::store::ARCHIVESET;
 use cache::file_handler::{ensure_initialized, get_data, get_master_index};
-use cache::version_trailer::VersionTrailer;
 use io::connection::Connection;
 use io::packet::Packet;
 
@@ -32,18 +30,13 @@ pub (crate) enum Js5Request {
 }
 
 impl Js5Request {
-    
-    
     pub fn fulfill_request(connection: &mut Connection, request: &Js5Request) -> Result<(), Box<dyn Error>> {
-        debug!("Fulfilling request: {:?}", request);
-
         // Ensure the cache is initialized in this thread before proceeding
         ensure_initialized()?;
 
         if let Js5Request::Group { urgent, archive, group } = request {
             if *archive == ARCHIVESET && *group == ARCHIVESET as u16 {
                 // Handle master index request
-                let mut success = false;
                 
                 let master_index = get_master_index()?;
                 let master_index_length = master_index.len();
