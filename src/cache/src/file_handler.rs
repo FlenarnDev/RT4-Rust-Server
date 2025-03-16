@@ -13,6 +13,7 @@ use rs2cache::store::ARCHIVESET;
 struct CacheData {
     preloaded_data: HashMap<(u8, u16), Vec<u8>>,
     master_index: Option<Vec<u8>>,
+    checksums: Vec<u32>,
     cache_path: String
 }
 
@@ -20,6 +21,7 @@ static GLOBAL_CACHE_DATA: Lazy<RwLock<CacheData>> = Lazy::new(|| {
     RwLock::new(CacheData {
         preloaded_data: HashMap::with_capacity(67551),
         master_index: None,
+        checksums: Vec::new(),
         cache_path: "../../src/cacheLocal".to_string()
     })
 });
@@ -46,13 +48,15 @@ fn initialize_cache() -> Result<(), Box<dyn error::Error>> {
     let master_index = Js5MasterIndex::create(&cache.store);
     let master_index_data = master_index.write();
 
+    let mut checksums: Vec<u32> = Vec::with_capacity(master_index.entries.len());
+
     let mut preloaded_data = HashMap::with_capacity(67553);
     let mut total_entries = 0;
     let mut successful_loads = 0;
     let mut failed_loads = 0;
     
     for archive_id in 0..master_index.entries.len() {
-        debug!("Checksum for archive {}: {}", archive_id, master_index.entries[archive_id].checksum);
+        checksums.push(master_index.entries[archive_id].checksum);
         let js5_index_compressed = cache.store.read(255, archive_id as u32).unwrap();
         let js5_index_decompressed = Js5Compression::uncompress(js5_index_compressed, None)?;
         let js5_index = Js5Index::read(js5_index_decompressed).unwrap();
@@ -102,6 +106,7 @@ fn initialize_cache() -> Result<(), Box<dyn error::Error>> {
     let mut global_data = GLOBAL_CACHE_DATA.write().unwrap();
     global_data.preloaded_data = preloaded_data;
     global_data.master_index = Some(master_index_data);
+    global_data.checksums = checksums;
     global_data.cache_path = cache_path.to_string();
 
     Ok(())
@@ -145,4 +150,12 @@ pub fn get_master_index() -> Result<Vec<u8>, Box<dyn error::Error>> {
     let data_cache = GLOBAL_CACHE_DATA.read().unwrap();
     data_cache.master_index.clone()
         .ok_or_else(|| "Master index not initialized".into())
+}
+
+pub fn get_checksum(archive_id: usize) -> Result<u32, Box<dyn error::Error>> {
+    ensure_initialized()?;
+    let data_cache = GLOBAL_CACHE_DATA.read().unwrap();
+    data_cache.checksums.get(archive_id)
+        .copied()
+        .ok_or_else(|| format!("Checksum not found for archive: {}", archive_id).into())
 }

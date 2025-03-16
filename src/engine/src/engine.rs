@@ -6,6 +6,7 @@ use std::thread;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use log::{debug, error, info};
+use cache::file_handler::{ensure_initialized, get_checksum};
 use cache::xtea::{initialize_xtea, XTEAKey};
 use constants::window_mode::window_mode;
 use constants::login_out::login_out;
@@ -62,6 +63,12 @@ impl Engine {
     
     pub fn start(&mut self, start_cycle: bool) {
 
+        if let Err(e) = ensure_initialized() {
+            error!("Failed to initialize cache in main thread: {}", e);
+        } else {
+            debug!("Cache successfully initialized in main thread");
+        }
+        
         initialize_xtea().expect("Failed to initialize XTEA module.");
         
         info!("Starting server on port 40001");
@@ -487,8 +494,12 @@ impl Engine {
 
             for i in 0..28 {
                 checksums[i] = client.inbound().g4() as u32;
-                // TODO - validate against server cache
-                debug!("Checksum {}: {}", i, checksums[i]);
+                if checksums[i] != get_checksum(i).expect("Failed to get checksum for archive") {
+                    client.outbound.p1(login_out::CLIENT_OUT_OF_DATE);
+                    client.write_packet().expect("Failed to write packet to new connection");
+                    client.shutdown();
+                    return
+                }
             }
 
             let rsa_block_length = client.inbound().g1();
