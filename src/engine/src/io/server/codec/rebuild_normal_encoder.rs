@@ -3,7 +3,7 @@ use cache::xtea::get_xtea_key_by_mapsquare;
 use crate::io::packet::Packet;
 use crate::io::server::codec::message_encoder::MessageEncoder;
 use crate::io::server::model::rebuild_normal::RebuildNormal;
-use crate::io::server::prot::server_protocol::ServerProtocol;
+use crate::io::server::protocol::server_protocol::ServerProtocol;
 
 pub struct RebuildNormalEncoder;
 

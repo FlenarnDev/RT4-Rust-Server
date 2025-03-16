@@ -1,12 +1,12 @@
 use std::time::Instant;
 use log::{debug, error};
-use crate::io::client::client_protocol::BY_ID;
-use crate::io::client::client_protocol_category::ClientProtocolCategory;
+use crate::io::client::protocol::client_protocol::BY_ID;
+use crate::io::client::protocol::client_protocol_category::ClientProtocolCategory;
 use crate::io::server::model::rebuild_normal::RebuildNormal;
 use crate::io::server::outgoing_message::OutgoingMessage;
-use crate::io::server::prot::server_protocol::ServerProtocol;
-use crate::io::server::prot::server_protocol_priority::ServerProtocolPriority;
-use crate::io::server::prot::server_protocol_repository::SERVER_PROTOCOL_REPOSITORY;
+use crate::io::server::protocol::server_protocol::ServerProtocol;
+use crate::io::server::protocol::server_protocol_priority::ServerProtocolPriority;
+use crate::io::server::protocol::server_protocol_repository::SERVER_PROTOCOL_REPOSITORY;
 use crate::entity::entity::EntityExt;
 use crate::entity::player::Player;
 use crate::game_connection::GameClient;

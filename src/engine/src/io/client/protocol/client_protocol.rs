@@ -3,7 +3,7 @@ use lazy_static::lazy_static;
 
 #[derive(Debug, Clone)]
 pub struct ClientProtocol {
-    pub id: i32,
+    pub id: u32,
     pub length: i32
 }
 
