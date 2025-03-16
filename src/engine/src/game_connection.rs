@@ -186,4 +186,40 @@ impl GameClient {
         self.state = ConnectionState::New;
         self
     }
+
+    pub fn has_available(&mut self, required_bytes: usize) -> Result<bool, std::io::Error> {
+        if self.stream.is_none() {
+            return Err(std::io::Error::new(ErrorKind::NotConnected, "No connection"));
+        }
+
+        // Save current blocking state
+        let stream = self.stream.as_ref().unwrap();
+        let was_nonblocking = match stream.set_nonblocking(true) {
+            Ok(_) => false,
+            Err(_) => true, // It was already nonblocking
+        };
+
+        // Create a buffer just large enough for our needs
+        let mut peek_buf = vec![0u8; required_bytes];
+
+        // Peek to see if we have enough bytes
+        let result = match self.stream.as_ref().unwrap().peek(&mut peek_buf) {
+            Ok(n) => n >= required_bytes, // Return true if we have enough bytes
+            Err(e) if e.kind() == ErrorKind::WouldBlock => false, // No data available
+            Err(e) => {
+                // Restore blocking state if needed
+                if !was_nonblocking {
+                    let _ = self.stream.as_ref().unwrap().set_nonblocking(false);
+                }
+                return Err(e);
+            }
+        };
+
+        // Restore blocking state if needed
+        if !was_nonblocking {
+            let _ = self.stream.as_ref().unwrap().set_nonblocking(false);
+        }
+
+        Ok(result)
+    }
 }

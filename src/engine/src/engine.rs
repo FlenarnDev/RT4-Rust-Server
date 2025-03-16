@@ -7,6 +7,7 @@ use std::thread::sleep;
 use std::time::{Duration, Instant};
 use log::{debug, error, info};
 use cache::xtea::{initialize_xtea, XTEAKey};
+use constants::window_mode::window_mode;
 use constants::login_out::login_out;
 use constants::login_out::login_out::OK;
 use constants::title_protocol::title_protocol;
@@ -474,8 +475,8 @@ impl Engine {
             //debug!("Adverts suppressed: {}", adverts_suppressed);
             let client_signed = client.inbound().g1b();
             //debug!("Client signed: {}", client_signed);
-            let display_mode = client.inbound().g1b();
-            //debug!("Display mode: {}", display_mode);
+            let window_mode = window_mode::from_i8(client.inbound.g1b());
+            debug!("Display mode: {:?}", window_mode);
             let canvas_width = client.inbound().g2();
             //debug!("Canvas width: {}", canvas_width);
             let canvas_height = client.inbound().g2();
@@ -531,18 +532,6 @@ impl Engine {
             } else if client.opcode == title_protocol::LOGIN {
                 client.outbound.p1(OK);
                 client.write_packet().expect("Failed to write packet to new connection");
-                // TODO - Move this logic to [on_login]? PID access easier there.
-                client.outbound.p1(2); // Staff mod level
-                client.outbound.p1(0); // Blackmarks?
-                client.outbound.p1(0); // Underage (false = 0)
-                client.outbound.p1(0); // Parental Chat consent 
-                client.outbound.p1(0); // Parental Advert Consent
-                client.outbound.p1(0); // Map Quick Chat
-                client.outbound.p1(0); // Mouse Recorder
-                // TODO - fix so we work on the engine context??
-                client.outbound.p2(1); // Player ID
-                client.outbound.p1(1); // Player Member
-                client.outbound.p1(1); // Members map
             }
             
             client.opcode = -1;
@@ -553,7 +542,7 @@ impl Engine {
                 GameClient::new_dummy()
             ));
 
-            let player = Player::new(CoordGrid::from(3200, 0, 3200), 0, 12);
+            let player = Player::new(CoordGrid::from(3200, 0, 3200), 0, window_mode, -1);
 
             let network_player = NetworkPlayer::new(
                 player,

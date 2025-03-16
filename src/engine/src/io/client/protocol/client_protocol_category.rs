@@ -1,4 +1,5 @@
 /// Packet decoding limit per tick, exceeding this ends decoding and picks up where it left off on the next tick.
+#[derive(PartialEq, Debug)]
 pub struct ClientProtocolCategory {
     pub id: u8,
     pub limit: u8,

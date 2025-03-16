@@ -2,4 +2,4 @@ mod incoming_message;
 mod handler;
 mod codec;
 mod model;
-pub(crate) mod protocol;
+pub mod protocol;

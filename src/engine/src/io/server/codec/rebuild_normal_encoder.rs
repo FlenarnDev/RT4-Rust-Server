@@ -23,9 +23,7 @@ impl MessageEncoder<RebuildNormal> for RebuildNormalEncoder {
         temporary_packet.p2add(message.local_x());
 
         for mapsquare in message.mapsquares() {
-            debug!("[rebuild_normal_encoder] Processing mapsquare: {}", mapsquare);
             let xtea_key = get_xtea_key_by_mapsquare(mapsquare);
-
             if xtea_key.is_zero() {
                 for _i in 0..4 {
                     temporary_packet.p4me(0);
