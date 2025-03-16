@@ -272,21 +272,21 @@ impl Packet {
 
     #[inline(always)]
     pub fn g2(&mut self) -> u16 {
-        // Bounds check with branch prediction hint
-        if likely!(self.position + 1 < self.data.len()) {
-            let pos = self.position;
-            self.position += 2;
-            u16::from_be_bytes([self.data[pos], self.data[pos + 1]])
-        } else {
-            if self.position < self.data.len() {
-                // Handle partial reads
-                let result = (self.data[self.position] as u16) << 8;
-                self.position = self.data.len();
-                result
-            } else {
-                0
-            }
-        }
+        self.position += 2;
+        (self.data[self.position - 2] as u16) << 8 | self.data[self.position - 1] as u16
+    }
+    
+    #[inline(always)]
+    pub fn g2add(&mut self) -> u16 {
+        self.position += 2;
+        ((self.data[self.position - 2] as u16) << 8) | (self.data[self.position - 1].wrapping_sub(128) as u16)
+    }
+    
+    #[inline(always)]
+    pub fn g2b(&mut self) -> i16 {
+        self.position += 2;
+        let value = ((self.data[self.position - 2] as u16) << 8) | (self.data[self.position - 1] as u16);
+        value as i16
     }
 
     #[inline(always)]
@@ -325,6 +325,11 @@ impl Packet {
                 0
             }
         }
+    }
+    #[inline(always)]
+    pub fn ig2(&mut self) -> u16 {
+        self.position += 2;
+        ((self.data[self.position - 1] as u16) << 8) | (self.data[self.position - 2] as u16)
     }
 
     #[inline(always)]
