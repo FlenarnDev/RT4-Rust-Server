@@ -16,7 +16,7 @@ pub struct GameClient {
     pub encryptor: Option<Isaac>,
     pub decryptor: Option<Isaac>,
     /// Current opcode being read.
-    pub opcode: i32,
+    pub opcode: u8,
     /// Bytes to wait for (if any)
     pub waiting: i32,
     read_buffer: Vec<u8>,
@@ -33,7 +33,7 @@ impl GameClient {
             total_bytes_written: 0,
             encryptor: None,
             decryptor: None,
-            opcode: -1,
+            opcode: 0,
             waiting: 0,
             read_buffer: vec![0u8; BUFFER_SIZE],
         }
@@ -49,7 +49,7 @@ impl GameClient {
             total_bytes_written: 0,
             encryptor: None,
             decryptor: None,
-            opcode: -1,
+            opcode: 0,
             waiting: 0,
             read_buffer: Vec::with_capacity(1),
         }

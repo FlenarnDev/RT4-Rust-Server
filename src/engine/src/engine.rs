@@ -449,7 +449,7 @@ impl Engine {
             return
         }
 
-        client.opcode = client.inbound().g1() as i32;
+        client.opcode = client.inbound().g1();
 
         if client.opcode == title_protocol::INIT_GAME_CONNECTION {
             client.read_packet_with_size(1).unwrap();
@@ -531,7 +531,7 @@ impl Engine {
                 client.outbound.p1(login_out::OK);
             }
 
-            client.opcode = -1;
+            client.opcode = 0;
             client.state = ConnectionState::Connected;
 
             let mut new_client = Some(std::mem::replace(

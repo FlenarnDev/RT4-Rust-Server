@@ -35,7 +35,7 @@ impl NetworkPlayer {
             user_limit: 0,
             client_limit: 0,
             restricted_limit: 0,
-            user_path: vec![],
+            user_path: Vec::new(),
             op_called: false,
             bytes_read: 0,
         }
@@ -48,18 +48,19 @@ impl NetworkPlayer {
             user_limit: 0,
             client_limit: 0,
             restricted_limit: 0,
-            user_path: vec![],
+            user_path: Vec::new(),
             op_called: false,
             bytes_read: 0,
         }
     }
 
+    #[inline]
     pub fn is_client_connected(self: &Self) -> bool {
         self.client.is_connection_active()
     }
     
     pub fn decode_in(&mut self, current_tick: i32) -> bool {
-        self.user_path = vec![];
+        self.user_path.clear();
         self.op_called = false;
         
         if !self.is_client_connected() {
@@ -82,25 +83,26 @@ impl NetworkPlayer {
         true
     }
     
+    #[inline]
     fn read(&mut self) -> bool {
         if !self.client.has_available(1).unwrap() {
             return false
         }
         
-        if self.client.opcode == -1 {
+        if self.client.opcode == 0 {
             self.client.read_packet_with_size(1).unwrap();
             
             if !self.client.decryptor.is_none() {
                 // TODO - ISAAC stuff
             } else {
-                self.client.opcode = self.client.inbound.g1() as i32;
+                self.client.opcode = self.client.inbound.g1();
             }
 
             if let Some(packet_type) = &BY_ID[self.client.opcode as usize] {
                 self.client.waiting = packet_type.length;
             } else {
                 println!("Unknown packet type: {}", self.client.opcode);
-                self.client.opcode = -1;
+                self.client.opcode = 0;
                 self.client.shutdown();
                 return false;
             }
@@ -126,6 +128,7 @@ impl NetworkPlayer {
 
         self.client.read_packet_with_size(self.client.waiting as usize).unwrap();
         let packet_type = &BY_ID[self.client.opcode as usize].clone().unwrap();
+        
         let decoder = get_decoder(packet_type);
 
         if let Some(decoder) = decoder {
@@ -139,7 +142,7 @@ impl NetworkPlayer {
 
             if success && message.category() == ClientProtocolCategory::USER_EVENT {
                 self.user_limit += 1;
-            } else if message.category() == ClientProtocolCategory::USER_EVENT {
+            } else if message.category() == ClientProtocolCategory::RESTRICTED_EVENT {
                 self.restricted_limit += 1;
             } else {
                 self.client_limit += 1;
@@ -148,7 +151,7 @@ impl NetworkPlayer {
         
         self.bytes_read += self.client.inbound.position;
 
-        self.client.opcode = -1;
+        self.client.opcode = 0;
         true
     }
 
@@ -224,7 +227,7 @@ impl NetworkPlayer {
             return;
         }
         
-        if (message.priority() == ServerProtocolPriority::IMMEDIATE) {
+        if message.priority() == ServerProtocolPriority::IMMEDIATE {
             self.write_inner(message);
         } else {
             // TODO - buffer push
@@ -236,13 +239,15 @@ impl NetworkPlayer {
             return;
         }
         
-        let encoder = SERVER_PROTOCOL_REPOSITORY.get_encoder(&message);
-        if encoder.is_none() {
-            error!("No encoder found for {:?}", message);
-            return;
-        }
+        let encoder = match SERVER_PROTOCOL_REPOSITORY.get_encoder(&message) {
+            Some(e) => e,
+            None => {
+                error!("No encoder found for {:?}", message);
+                return
+            },
+        };
         
-        let protocol: ServerProtocol = encoder.unwrap().protocol();
+        let protocol: ServerProtocol = encoder.protocol();
 
         if !self.client.encryptor.is_none() {
             // TODO - ISAAC stuff
@@ -250,7 +255,7 @@ impl NetworkPlayer {
             self.client.outbound.p1(protocol.id);
         }
 
-        encoder.unwrap().encode(&mut self.client.outbound, &message);
+        encoder.encode(&mut self.client.outbound, &message);
         self.client.write_packet().unwrap();
     }
 }
