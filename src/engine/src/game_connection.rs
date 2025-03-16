@@ -13,8 +13,8 @@ pub struct GameClient {
     pub state: ConnectionState,
     total_bytes_read: usize,
     total_bytes_written: usize,
-    pub(crate) encryptor: Option<Isaac>,
-    decryptor: Option<Isaac>,
+    pub encryptor: Option<Isaac>,
+    pub decryptor: Option<Isaac>,
     /// Current opcode being read.
     pub opcode: i32,
     /// Bytes to wait for (if any)
@@ -96,7 +96,7 @@ impl GameClient {
         Ok(bytes_read)
     }
 
-    /// Write data from outbound packet to stream
+    /// Write data from outbound [Packet] to stream
     pub fn write_packet(&mut self) -> Result<usize, std::io::Error> {
         if self.stream.is_none() {
             return Err(std::io::Error::new(ErrorKind::NotConnected, "No connection"));

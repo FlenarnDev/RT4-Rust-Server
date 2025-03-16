@@ -16,6 +16,8 @@ pub struct Player {
     
     pub pid: i32,
     
+    pub origin_coord: CoordGrid,
+    
     pub request_logout: bool,
     pub request_idle_logout: bool,
     pub logging_out: bool,
@@ -41,6 +43,7 @@ impl Player {
             gender,
             playtime: -1,
             pid,
+            origin_coord: CoordGrid { coord: 0 },
             request_logout: false,
             request_idle_logout: false,
             logging_out: false,
@@ -50,4 +53,3 @@ impl Player {
         }
     }
 }
-

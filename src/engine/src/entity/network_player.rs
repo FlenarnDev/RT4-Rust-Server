@@ -1,9 +1,16 @@
-use log::debug;
-use io::client_protocol::BY_ID;
-use io::client_protocol_category::ClientProtocolCategory;
+use std::time::Instant;
+use log::{debug, error};
+use io::client::client_protocol::BY_ID;
+use io::client::client_protocol_category::ClientProtocolCategory;
+use io::server::model::rebuild_normal::RebuildNormal;
+use io::server::outgoing_message::OutgoingMessage;
+use io::server::prot::server_protocol::ServerProtocol;
+use io::server::prot::server_protocol_priority::ServerProtocolPriority;
+use io::server::prot::server_protocol_repository::SERVER_PROTOCOL_REPOSITORY;
 use crate::entity::entity::EntityExt;
 use crate::entity::player::Player;
 use crate::game_connection::GameClient;
+use crate::grid::coord_grid::CoordGrid;
 
 pub struct NetworkPlayer {
     pub(crate) player: Player,
@@ -71,7 +78,6 @@ impl NetworkPlayer {
     }
     
     fn read(&mut self) -> bool {
-        debug!("read");
         let mut peek_buf = [0u8; 1];
 
         match self.client.stream.as_ref().unwrap().set_nonblocking(true) {
@@ -89,7 +95,6 @@ impl NetworkPlayer {
             }
             Ok(_) => {
                 // Data is available, continue processing
-                debug!("Data available");
             }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 // No data available yet, but connection is still open
@@ -110,13 +115,10 @@ impl NetworkPlayer {
             }
         }
         
-        debug!("read2");
-        
         if self.client.opcode == -1 {
-            debug!("opcode == -1");
             self.client.read_packet_with_size(1).unwrap();
             
-            if !self.client.encryptor.is_none() {
+            if !self.client.decryptor.is_none() {
                 // TODO - ISAAC stuff
             } else {
                 self.client.opcode = self.client.inbound.g1() as i32;
@@ -131,13 +133,106 @@ impl NetworkPlayer {
                 return false;
             }
         }
-        debug!("tada?");
         
+        self.client.opcode = -1;
         true
     }
     
-    fn on_login() {
+    /// rebuild_normal
+    /// 
+    /// chat_filter_settings
+    /// 
+    /// varp_reset
+    /// 
+    /// varps
+    /// 
+    /// inventories
+    /// 
+    /// interfaces
+    /// 
+    /// stats
+    /// 
+    /// runweight
+    /// 
+    /// runenergy
+    /// 
+    /// reset animations
+    /// 
+    /// social
+    pub fn on_login(&mut self) {
+        let start = Instant::now();
+        self.rebuild_normal(false); 
         
+        
+        
+        self.player.entity.active = true;
+        debug!("Processed on login in: {:?}", start.elapsed());
+    }
+    
+    fn rebuild_normal(&mut self, reconnect: bool) {
+        let origin_x = CoordGrid::zone(self.player.origin_coord.x()) as i16;
+        let origin_z = CoordGrid::zone(self.player.origin_coord.z()) as i16;
+        
+        let reload_left_x = (origin_x - 4) << 3;
+        let reload_right_x = (origin_x + 5) << 3;
+        let reload_top_z = (origin_z + 5) << 3;
+        let reload_bottom_z = (origin_z - 4) << 3;
+        
+        // If the build area should be regenerated, do so now
+        if self.player.entity.coord.x() < reload_left_x as u16
+            || self.player.entity.coord.z() < reload_bottom_z as u16
+            || self.player.entity.coord.x() > (reload_right_x - 1) as u16
+            || self.player.entity.coord.z() > (reload_top_z - 1) as u16
+            || reconnect {
+            self.write(RebuildNormal::new(CoordGrid::zone(self.player.entity.coord.x()) as i32, CoordGrid::zone(self.player.entity.coord.z()) as i32, self.player.entity.coord.local_x(), self.player.entity.coord.local_z()));
+            
+            debug!("Rebuilding normal, player coord: {}, {}", self.player.entity.coord.x(), self.player.entity.coord.z());
+            
+            self.player.origin_coord.coord = self.player.entity.coord.coord;
+        }
+    }
+    
+    fn write(&mut self, message: impl OutgoingMessage + 'static) {
+        if !self.is_client_connected() {
+            return;
+        }
+        
+        if (message.priority() == ServerProtocolPriority::IMMEDIATE) {
+            debug!("IMMEDIATE outgoing message: {:?}", message);
+            self.write_inner(message);
+        } else {
+            // TODO - buffer push
+        }
+    }
+    
+    fn write_inner(&mut self, message: impl OutgoingMessage + 'static) {
+        if !self.is_client_connected() {
+            return;
+        }
+        
+        let encoder = SERVER_PROTOCOL_REPOSITORY.get_encoder(&message);
+        
+        if encoder.is_none() {
+            error!("No encoder found for {:?}", message);
+            return;
+        }
+        
+        let protocol: ServerProtocol = encoder.unwrap().protocol();
+        debug!("Protocol: {:?}", protocol);
+
+        //self.client.outbound.position = 0;
+        
+        if !self.client.encryptor.is_none() {
+            // TODO - ISAAC stuff
+        } else {
+            self.client.outbound.p1(protocol.id);
+        }
+        
+        debug!("Outbound buffer size: {}", self.client.outbound().data.len());
+        
+        encoder.unwrap().encode(&mut self.client.outbound, &message);
+        
+        self.client.write_packet().unwrap();
     }
 }
 
@@ -146,4 +241,3 @@ impl EntityExt for NetworkPlayer {
         self.player.pid as usize
     }
 }
-

@@ -13,4 +13,5 @@ rsmod-pathfinder = "5.0.4"
 uuid = { version = "1.15.1", features = ["v4"] }
 constants = { path = "../constants" }
 rand = "0.9.0"
+cache = {path = "../cache" }
 num-bigint = "0.4.6"

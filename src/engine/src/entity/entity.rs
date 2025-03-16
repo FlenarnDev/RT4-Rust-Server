@@ -25,7 +25,7 @@ impl Entity {
             active: false,
         }
     }
-    
+
     /*pub fn update_lifecycle(&self, tick: u32) -> bool {
         //self.lifecycle_tick == tick..unwrap() && self.lifecycle == EntityLifeCycle::Forever
     }*/
