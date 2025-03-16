@@ -3,10 +3,9 @@ mod countries;
 use std::error::Error;
 use tokio::net::{TcpListener, TcpStream};
 use log::{debug, error, info};
-use tokio::io::AsyncReadExt;
 use constants::server_addresses::server_addresses::WORLDLIST_ADDR;
-use io::connection::{try_write_packet, Connection};
-use io::packet::Packet;
+use engine::io::connection::{try_write_packet, Connection};
+use engine::io::packet::Packet;
 use countries::COUNTRY_MAP;
 
 fn write_country_info(response: &mut Packet, country: &str) {
@@ -14,7 +13,6 @@ fn write_country_info(response: &mut Packet, country: &str) {
     response.psmart(*code);
     response.pjstr2(country);
 }
-
 
 async fn handle_worldlist_client(stream: TcpStream) -> Result<(), Box<dyn Error>> {
     let addr = stream.peer_addr()?;
@@ -28,7 +26,7 @@ async fn handle_worldlist_client(stream: TcpStream) -> Result<(), Box<dyn Error>
                 debug!("Connection closed by client: {}", addr);
                 break;
             }
-            Ok(n) => {
+            Ok(_n) => {
                 let checksum = connection.inbound.g4();
 
                 let mut response = Packet::from(vec![]);

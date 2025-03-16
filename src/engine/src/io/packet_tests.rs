@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use crate::packet::Packet;
+use crate::io::packet::Packet;
 
 #[test]
 fn test_packet_creation() {

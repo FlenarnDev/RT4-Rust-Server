@@ -3,8 +3,8 @@ use std::time::Duration;
 use constants::proxy::proxy::{BUFFER_SIZE, READ_TIMEOUT_MS};
 use constants::server_addresses::server_addresses::{JS5_ADDR, WORLDLIST_ADDR, PROXY_ADDR};
 use constants::title_protocol::title_protocol;
-use io::connection::{try_write_packet, Connection};
-use io::packet::Packet;
+use engine::io::connection::{try_write_packet, Connection};
+use engine::io::packet::Packet;
 use tokio::net::{TcpListener, TcpStream};
 use log::{debug, error, info};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -101,7 +101,7 @@ async fn handle_proxy_client(client_stream: TcpStream) -> Result<(), Box<dyn Err
     // Get the backend address for the destination
     let backend_addr = get_address(&destination);
     
-    if (backend_addr == "world_suitability") {
+    if backend_addr == "world_suitability" {
         client_conn.outbound.p1(101);
         client_conn.outbound.p2(15);
         try_write_packet(&mut client_conn).await;
@@ -125,9 +125,6 @@ async fn handle_proxy_client(client_stream: TcpStream) -> Result<(), Box<dyn Err
 
     // Extract the stream from client_conn
     let client_stream = client_conn.stream;
-
-    // Extract the stream from client_conn
-    let _ = client_conn;
 
     // Split the streams to avoid sharing mutable references across tasks
     let (mut client_read, mut client_write) = client_stream.into_split();

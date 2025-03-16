@@ -3,8 +3,8 @@ use log::{debug, error};
 use constants::proxy::proxy::BUFFER_SIZE;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use crate::client_state::ConnectionState;
-use crate::packet::Packet;
+use crate::io::client_state::ConnectionState;
+use crate::io::packet::Packet;
 
 pub struct Connection {
     pub stream: TcpStream,

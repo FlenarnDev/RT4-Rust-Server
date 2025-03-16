@@ -7,7 +7,6 @@ edition = "2021"
 
 [dependencies]
 log = "0.4.26"
-io = { path = "../io" }
 env_logger = "0.11.6"
 rsmod-pathfinder = "5.0.4"
 uuid = { version = "1.15.1", features = ["v4"] }
@@ -15,3 +14,6 @@ constants = { path = "../constants" }
 rand = "0.9.0"
 cache = {path = "../cache" }
 num-bigint = "0.4.6"
+lazy_static = "1.5.0"
+tokio = { version = "1.44.1", features = ["full"] }
+criterion = "0.5.1"

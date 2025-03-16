@@ -10,8 +10,8 @@ use cache::xtea::{initialize_xtea, XTEAKey};
 use constants::login_out::login_out;
 use constants::login_out::login_out::OK;
 use constants::title_protocol::title_protocol;
-use io::client_state::ConnectionState;
-use io::rsa::rsa;
+use crate::io::client_state::ConnectionState;
+use crate::io::rsa::rsa;
 use crate::engine_stat::EngineStat;
 use crate::entity::entity_list::NetworkPlayerList;
 use crate::entity::network_player::NetworkPlayer;
@@ -531,6 +531,7 @@ impl Engine {
             } else if client.opcode == title_protocol::LOGIN {
                 client.outbound.p1(OK);
                 client.write_packet().expect("Failed to write packet to new connection");
+                // TODO - Move this logic to [on_login]? PID access easier there.
                 client.outbound.p1(2); // Staff mod level
                 client.outbound.p1(0); // Blackmarks?
                 client.outbound.p1(0); // Underage (false = 0)
@@ -543,9 +544,10 @@ impl Engine {
                 client.outbound.p1(1); // Player Member
                 client.outbound.p1(1); // Members map
             }
-            debug!("Packet size from login: {}", client.outbound.data.len());
+            
+            client.opcode = -1;
             client.state = ConnectionState::Connected;
-
+            
             let mut new_client = Some(std::mem::replace(
                 client,
                 GameClient::new_dummy()
@@ -557,8 +559,6 @@ impl Engine {
                 player,
                 &mut new_client
             );
-            
-            debug!("After connection memory-swap, outbound buffer data: {:?}", network_player.client.outbound.data.len());
             
             let mut players_lock = thread_player.lock().unwrap();
             players_lock.push(network_player);

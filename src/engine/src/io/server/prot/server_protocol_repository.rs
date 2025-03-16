@@ -1,9 +1,9 @@
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
-use crate::server::codec::message_encoder::MessageEncoder;
-use crate::server::codec::rebuild_normal_encoder::RebuildNormalEncoder;
-use crate::server::model::rebuild_normal::RebuildNormal;
-use crate::server::outgoing_message::OutgoingMessage;
+use crate::io::server::codec::message_encoder::MessageEncoder;
+use crate::io::server::codec::rebuild_normal_encoder::RebuildNormalEncoder;
+use crate::io::server::model::rebuild_normal::RebuildNormal;
+use crate::io::server::outgoing_message::OutgoingMessage;
 
 struct TypedEncoder<T: OutgoingMessage> {
     encoder: Box<dyn MessageEncoder<T> + Send + Sync>,

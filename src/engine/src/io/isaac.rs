@@ -1,5 +1,3 @@
-use crate::client_state::ConnectionState;
-
 #[derive(Clone)]
 pub struct Isaac {
     rsl: Vec<i32>,

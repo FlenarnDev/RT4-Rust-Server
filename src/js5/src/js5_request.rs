@@ -3,8 +3,8 @@ use std::error::Error;
 use log::debug;
 use rs2cache::store::ARCHIVESET;
 use cache::file_handler::{ensure_initialized, get_data, get_master_index};
-use io::connection::Connection;
-use io::packet::Packet;
+use engine::io::connection::Connection;
+use engine::io::packet::Packet;
 
 const BLOCK_SIZE: usize = 512;
 pub const BLOCK_HEADER_SIZE: usize = 1 + 2 + 1;
@@ -74,7 +74,7 @@ impl Js5Request {
                     connection.outbound.p1(0xFF);
 
                     let chunk_size = min(size - written, BYTES_AFTER_BLOCK);
-                    connection.outbound.pbytes(&data_packet.data, (written + BLOCK_DELIMITER_SIZE), chunk_size);
+                    connection.outbound.pbytes(&data_packet.data, written + BLOCK_DELIMITER_SIZE, chunk_size);
                     written += chunk_size;
                 }
             }

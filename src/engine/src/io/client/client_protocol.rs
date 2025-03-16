@@ -20,5 +20,4 @@ lazy_static! {
         v[ClientProtocol::NO_TIMEOUT.id as usize] = Some(ClientProtocol::NO_TIMEOUT.clone());
         v
     };
-    
 }

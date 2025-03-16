@@ -1,5 +1,5 @@
-use crate::server::outgoing_message::OutgoingMessage;
-use crate::server::prot::server_protocol_priority::ServerProtocolPriority;
+use crate::io::server::outgoing_message::OutgoingMessage;
+use crate::io::server::prot::server_protocol_priority::ServerProtocolPriority;
 
 #[derive(Debug)]
 pub struct InfoMessage {}

@@ -2,9 +2,9 @@ use std::io::ErrorKind;
 use std::io::{Read, Write};
 use constants::proxy::proxy::BUFFER_SIZE;
 use std::net::{Shutdown, TcpStream};
-use io::client_state::ConnectionState;
-use io::isaac::Isaac;
-use io::packet::Packet;
+use crate::io::client_state::ConnectionState;
+use crate::io::isaac::Isaac;
+use crate::io::packet::Packet;
 
 pub struct GameClient {
     pub stream: Option<TcpStream>,

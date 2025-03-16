@@ -1,7 +1,7 @@
 pub mod rsa {
     use num_bigint::BigInt;
     use constants::rsa::title_protocol::{SERVER_EXPONENT, SERVER_MODULUS};
-    use crate::packet::Packet;
+    use crate::io::packet::Packet;
     
     pub fn decrypt_rsa_block(mut packet: Packet, packet_length: usize) -> Packet {
         let rsa_bytes_vec = packet.gbytes(packet_length);
