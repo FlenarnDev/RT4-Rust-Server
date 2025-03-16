@@ -470,36 +470,25 @@ impl Engine {
             }
 
             let bytes1 = client.inbound().g1b();
-            //debug!("Bytes1: {}", bytes1);
             let adverts_suppressed = client.inbound().g1b();
-            //debug!("Adverts suppressed: {}", adverts_suppressed);
             let client_signed = client.inbound().g1b();
-            //debug!("Client signed: {}", client_signed);
             let window_mode = window_mode::from_i8(client.inbound.g1b());
-            debug!("Display mode: {:?}", window_mode);
             let canvas_width = client.inbound().g2();
-            //debug!("Canvas width: {}", canvas_width);
             let canvas_height = client.inbound().g2();
-            //debug!("Canvas height: {}", canvas_height);
             let anti_aliasing = client.inbound().g1b();
-            //debug!("Anti aliasing: {}", anti_aliasing);
             let uid = client.inbound().gbytes(24);
             //debug!("UID: {:?}", uid);
             let site_settings_cookie = client.inbound().gjstr(0);
-            //debug!("Site settings cookie: {}", site_settings_cookie);
             let affiliate_id = client.inbound().g4();
-            //debug!("Affiliate ID: {}", affiliate_id);
             let detail_options = client.inbound().g4();
-            //debug!("Detail options: {}", detail_options);
             let verify_id = client.inbound().g2();
-            //debug!("Verify ID: {}", verify_id);
 
             let mut checksums = [0u32; 28];
 
             for i in 0..28 {
                 checksums[i] = client.inbound().g4() as u32;
                 // TODO - validate against server cache
-                //debug!("Checksum {}: {}", i, checksums[i]);
+                debug!("Checksum {}: {}", i, checksums[i]);
             }
 
             let rsa_block_length = client.inbound().g1();
@@ -533,10 +522,10 @@ impl Engine {
                 client.outbound.p1(OK);
                 client.write_packet().expect("Failed to write packet to new connection");
             }
-            
+
             client.opcode = -1;
             client.state = ConnectionState::Connected;
-            
+
             let mut new_client = Some(std::mem::replace(
                 client,
                 GameClient::new_dummy()
@@ -548,7 +537,7 @@ impl Engine {
                 player,
                 &mut new_client
             );
-            
+
             let mut players_lock = thread_player.lock().unwrap();
             players_lock.push(network_player);
         } else {

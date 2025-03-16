@@ -19,9 +19,6 @@ impl MessageDecoder for WindowStatusDecoder {
         let canvas_width = packet.g2() as u32;
         let canvas_height = packet.g1() as u32;
         let anti_aliasing_mode = packet.g1b() as u32;
-        debug!("Decoding window modes");
-
-        let window_status = WindowStatusMessage { window_mode, canvas_width, canvas_height, anti_aliasing_mode };
-        Box::new(window_status)
+        Box::new(WindowStatusMessage { window_mode, canvas_width, canvas_height, anti_aliasing_mode })
     }
 }

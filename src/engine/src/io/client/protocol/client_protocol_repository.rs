@@ -3,8 +3,10 @@ use std::fmt;
 use lazy_static::lazy_static;
 use crate::entity::network_player::NetworkPlayer;
 use crate::io::client::codec::message_decoder::MessageDecoder;
+use crate::io::client::codec::verification_decoder::VerificationDecoder;
 use crate::io::client::codec::window_status_decoder::WindowStatusDecoder;
 use crate::io::client::handler::message_handler::MessageHandler;
+use crate::io::client::handler::verification_handler::VerificationHandler;
 use crate::io::client::handler::window_status_handler::WindowStatusHandler;
 use crate::io::client::incoming_message::IncomingMessage;
 use crate::io::client::protocol::client_protocol::ClientProtocol;
@@ -96,7 +98,12 @@ impl ClientProtocolRepository {
         repository.bind(
             WindowStatusDecoder,
             WindowStatusHandler,
-        ).expect("[ClientProtocolRepository] Failed to bind window status decoder");
+        ).unwrap();
+        
+        repository.bind(
+            VerificationDecoder,
+            VerificationHandler,
+        ).unwrap();
 
         repository
     }

@@ -52,6 +52,7 @@ fn initialize_cache() -> Result<(), Box<dyn error::Error>> {
     let mut failed_loads = 0;
     
     for archive_id in 0..master_index.entries.len() {
+        debug!("Checksum for archive {}: {}", archive_id, master_index.entries[archive_id].checksum);
         let js5_index_compressed = cache.store.read(255, archive_id as u32).unwrap();
         let js5_index_decompressed = Js5Compression::uncompress(js5_index_compressed, None)?;
         let js5_index = Js5Index::read(js5_index_decompressed).unwrap();

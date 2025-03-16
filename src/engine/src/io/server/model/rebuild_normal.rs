@@ -1,6 +1,6 @@
-use std::collections::{BTreeSet, HashSet};
 use crate::io::server::outgoing_message::OutgoingMessage;
 use crate::io::server::protocol::server_protocol_priority::ServerProtocolPriority;
+use std::collections::BTreeSet;
 
 #[derive(Debug)]
 pub struct RebuildNormal {

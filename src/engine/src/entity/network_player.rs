@@ -1,4 +1,3 @@
-use std::cmp::PartialEq;
 use std::time::Instant;
 use log::{debug, error};
 use crate::io::client::protocol::client_protocol::BY_ID;
@@ -25,7 +24,7 @@ pub struct NetworkPlayer {
 
     pub user_path: Vec<i32>,
     pub op_called: bool,
-    pub bytes_read: i32,
+    pub bytes_read: usize,
 }
 
 impl NetworkPlayer {
@@ -76,6 +75,13 @@ impl NetworkPlayer {
         
         while self.user_limit < ClientProtocolCategory::USER_EVENT.limit && self.client_limit < ClientProtocolCategory::CLIENT_EVENT.limit && self.restricted_limit < ClientProtocolCategory::RESTRICTED_EVENT.limit && self.read() {
         }
+        
+        if self.bytes_read > 0 {
+            debug!("bytes read: {}", self.bytes_read);
+            self.player.last_response = current_tick;
+            self.bytes_read = 0;
+        }
+        
         true
     }
     
@@ -120,20 +126,21 @@ impl NetworkPlayer {
         if !self.client.has_available(self.client.waiting as usize).unwrap() {
             return false;
         }
-        
+
         self.client.read_packet_with_size(self.client.waiting as usize).unwrap();
         let packet_type = &BY_ID[self.client.opcode as usize].clone().unwrap();
+        debug!("received packet type: {:?}", packet_type);
         let decoder = get_decoder(packet_type);
-        
+
         if let Some(decoder) = decoder {
             let waiting_size = self.client.waiting as usize;
             let message = decoder.decode_erased(self.client.inbound(), waiting_size);
             let success: bool = get_handler(packet_type).map_or(false, |handler| handler.handle_erased(&*message, self));
-            
+
             if !success {
                 debug!("No handler for packet: {:?}", packet_type);
             }
-            
+
             if success && message.category() == ClientProtocolCategory::USER_EVENT {
                 self.user_limit += 1;
             } else if message.category() == ClientProtocolCategory::USER_EVENT {
@@ -142,11 +149,13 @@ impl NetworkPlayer {
                 self.client_limit += 1;
             }
         }
+        
+        self.bytes_read += self.client.inbound.position;
 
         self.client.opcode = -1;
         true
     }
-    
+
     /// initial_login
     ///
     /// rebuild_normal
@@ -179,12 +188,12 @@ impl NetworkPlayer {
         self.player.entity.active = true;
         debug!("Processed on login in: {:?}", start.elapsed());
     }
-    
+
     fn initial_login(&mut self) {
         self.client.outbound.p1(2); // Staff mod level
         self.client.outbound.p1(0); // Blackmarks?
         self.client.outbound.p1(0); // Underage (false = 0)
-        self.client.outbound.p1(0); // Parental Chat consent 
+        self.client.outbound.p1(0); // Parental Chat consent
         self.client.outbound.p1(0); // Parental Advert Consent
         self.client.outbound.p1(0); // Map Quick Chat
         self.client.outbound.p1(0); // Mouse Recorder
@@ -207,7 +216,7 @@ impl NetworkPlayer {
             || self.player.entity.coord.z() < reload_bottom_z as u16
             || self.player.entity.coord.x() > (reload_right_x - 1) as u16
             || self.player.entity.coord.z() > (reload_top_z - 1) as u16
-            || reconnect 
+            || reconnect
         {
             self.write(RebuildNormal::new(CoordGrid::zone(self.player.entity.coord.x()) as i32, CoordGrid::zone(self.player.entity.coord.z()) as i32, self.player.entity.coord.local_x(), self.player.entity.coord.local_z()));
             self.player.origin_coord.coord = self.player.entity.coord.coord;

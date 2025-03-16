@@ -1,4 +1,3 @@
-use log::debug;
 use cache::xtea::get_xtea_key_by_mapsquare;
 use crate::io::packet::Packet;
 use crate::io::server::codec::message_encoder::MessageEncoder;
