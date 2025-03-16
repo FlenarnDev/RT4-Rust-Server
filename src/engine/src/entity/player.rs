@@ -15,7 +15,7 @@ pub struct Player {
     pub gender: u8,
     pub playtime: i32,
     
-    pub pid: i32,
+    pub pid: usize,
     
     pub origin_coord: CoordGrid,
     
@@ -33,7 +33,7 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn new(coord: CoordGrid, gender: u8, window_mode: window_mode, pid: i32) -> Player {
+    pub fn new(coord: CoordGrid, gender: u8, window_mode: window_mode, pid: usize) -> Player {
         Player {
             entity: Entity::new(
                 coord,
@@ -59,7 +59,7 @@ impl Player {
         }
     }
     
-    pub fn new_dummy(coord: CoordGrid, gender: u8, pid: i32) -> Player {
+    pub fn new_dummy(coord: CoordGrid, gender: u8, pid: usize) -> Player {
         Player {
             entity: Entity::new(
               coord,

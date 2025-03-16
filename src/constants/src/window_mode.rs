@@ -18,4 +18,8 @@ impl window_mode {
             _ => window_mode::NULL
         }
     }
+    
+    pub fn is_resizeable(&self) -> bool {
+        self == &window_mode::HD_RESIZEABLE || self == &window_mode::NULL
+    }
 }

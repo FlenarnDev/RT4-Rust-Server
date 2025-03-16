@@ -10,7 +10,6 @@ use cache::file_handler::{ensure_initialized, get_checksum};
 use cache::xtea::{initialize_xtea, XTEAKey};
 use constants::window_mode::window_mode;
 use constants::login_out::login_out;
-use constants::login_out::login_out::OK;
 use constants::title_protocol::title_protocol;
 use crate::io::client_state::ConnectionState;
 use crate::io::rsa::rsa;
@@ -21,6 +20,7 @@ use crate::entity::npc::Npc;
 use crate::entity::player::Player;
 use crate::game_connection::GameClient;
 use crate::grid::coord_grid::CoordGrid;
+use crate::io::packet::Packet;
 
 pub struct Engine {
     pub members: bool,
@@ -46,6 +46,8 @@ impl Engine {
 
     const AFK_EVENTRATE: i32 = 500;
     
+    const INVALID_PID: usize = 5000;
+    
     pub fn new() -> Engine {
         Engine { 
             members: false,
@@ -68,7 +70,7 @@ impl Engine {
         } else {
             debug!("Cache successfully initialized in main thread");
         }
-        
+
         initialize_xtea().expect("Failed to initialize XTEA module.");
         
         info!("Starting server on port 40001");
@@ -302,8 +304,7 @@ impl Engine {
             shared_players.drain(..).collect::<Vec<NetworkPlayer>>()
         };
         
-        for mut player in player_to_add {
-            debug!("Adding player!");
+        for mut network_player in player_to_add {
             // Prevent logging in if a player save is being flushed
             // TODO
             
@@ -318,18 +319,25 @@ impl Engine {
             // Prevent logging in when the server is shutting down.
             // TODO
             
-            // Check if pid available, otherwise force disconnect, world full.
-            // TODO
-            let pid = self.get_next_pid(Some(&player.client));
-            player.player.pid = pid;
-            self.players.set(pid as usize, player).expect("Failed to set player!");
-            if let Some(mut player_ref) = self.players.get_mut(pid as usize) {
-                player_ref.on_login()
-            }
+            match self.get_next_pid(Some(&network_player.client)) { 
+                Ok(pid) =>  {
+                    network_player.client.write_packet().expect("Failed to write packet to new connection");
+                    network_player.player.pid = pid;
+                    self.players.set(pid, network_player).expect("Failed to set player!");
+                    if let Some(mut player_ref) = self.players.get_mut(pid) {
+                        player_ref.on_login()
+                    }
+                },
+                Err(_err) => {
+                    network_player.client.outbound = Packet::new(1);
+                    network_player.client.outbound.p1(login_out::WORLD_FULL);
+                    network_player.client.write_packet().expect("Failed to write packet to new connection");
+                    network_player.client.shutdown();
+                }
+            };
         }
         self.new_players.lock().unwrap().clear();
         self.cycle_stats[EngineStat::Logins as usize] = start.elapsed();
-        debug!("Processed logins in: {:?}", self.cycle_stats[EngineStat::Logins as usize])
     }
     
     /// Build list of active zones around players
@@ -421,25 +429,18 @@ impl Engine {
         }
     }*/
     
-    pub fn remove_player(&mut self, pid: i32) {
-        debug!("PID of player to be removed {}", pid);
-        if pid == -1 {
-            return;
-        }
-        
-        if let Some(mut player_ref) = self.players.get_mut(pid as usize) {
+    pub fn remove_player(&mut self, pid: usize) {
+        if let Some(mut player_ref) = self.players.get_mut(pid) {
             if player_ref.is_client_connected() {
                 player_ref.client.shutdown();
             }
 
             player_ref.player.entity.active = false;
         }
-        self.players.remove(pid as usize);
+        self.players.remove(pid);
     }
 
     fn on_new_connection(client: &mut GameClient, thread_player: Arc<Mutex<Vec<NetworkPlayer>>>) {
-        let start: Instant = Instant::now();
-
         client.read_packet_with_size(1).unwrap();
 
         if client.inbound.remaining() < 1 {
@@ -482,19 +483,16 @@ impl Engine {
             let window_mode = window_mode::from_i8(client.inbound.g1b());
             let canvas_width = client.inbound().g2();
             let canvas_height = client.inbound().g2();
-            let anti_aliasing = client.inbound().g1b();
+            let anti_aliasing_mode = client.inbound().g1b();
             let uid = client.inbound().gbytes(24);
-            //debug!("UID: {:?}", uid);
             let site_settings_cookie = client.inbound().gjstr(0);
             let affiliate_id = client.inbound().g4();
             let detail_options = client.inbound().g4();
             let verify_id = client.inbound().g2();
-
-            let mut checksums = [0u32; 28];
-
+            
             for i in 0..28 {
-                checksums[i] = client.inbound().g4() as u32;
-                if checksums[i] != get_checksum(i).expect("Failed to get checksum for archive") {
+                let checksum = client.inbound().g4() as u32;
+                if checksum != get_checksum(i).expect("Failed to get checksum for archive") {
                     client.outbound.p1(login_out::CLIENT_OUT_OF_DATE);
                     client.write_packet().expect("Failed to write packet to new connection");
                     client.shutdown();
@@ -528,10 +526,9 @@ impl Engine {
             debug!("Password: {}", password);
 
             if client.opcode == title_protocol::RECONNECT {
-                client.outbound.p1(15)
+                client.outbound.p1(login_out::RECONNECT_OK);
             } else if client.opcode == title_protocol::LOGIN {
-                client.outbound.p1(OK);
-                client.write_packet().expect("Failed to write packet to new connection");
+                client.outbound.p1(login_out::OK);
             }
 
             client.opcode = -1;
@@ -542,7 +539,7 @@ impl Engine {
                 GameClient::new_dummy()
             ));
 
-            let player = Player::new(CoordGrid::from(3200, 0, 3200), 0, window_mode, -1);
+            let player = Player::new(CoordGrid::from(3200, 0, 3200), 0, window_mode, Self::INVALID_PID);
 
             let network_player = NetworkPlayer::new(
                 player,
@@ -557,40 +554,32 @@ impl Engine {
             client.shutdown();
             return
         }
-        debug!("[on_new_connection] took: {:?}", start.elapsed());
     }
 
-    fn get_next_pid(&self, client: Option<&GameClient>) -> i32 {
-        // Default case - no client or any error case
-        let default = || self.players.next(false, None).unwrap_or(0) as i32;
-
-        // Early return if no client
+    fn get_next_pid(&self, client: Option<&GameClient>) -> Result<usize, &'static str>  {
+        let default = || self.players.next(false, None);
         let client = match client {
             Some(c) => c,
             None => return default(),
         };
 
-        // Early return if no stream
         let stream = match &client.stream {
             Some(s) => s,
             None => return default(),
         };
 
-        // Early return if can't get peer address
         let peer_addr = match stream.peer_addr() {
             Ok(addr) => addr,
             Err(_) => return default(),
         };
 
-        // Handle different IP types
         match peer_addr.ip() {
             IpAddr::V4(ipv4) => {
                 let last_octet = ipv4.octets()[3];
                 let start = (last_octet % 20) as usize * 100;
-                self.players.next(true, Some(start)).unwrap_or(0) as i32
+                self.players.next(true, Some(start)).map(|id| id)
             },
             IpAddr::V6(ipv6) => {
-                // Create a longer-lived String first
                 let ip_string = ipv6.to_string();
                 let third_segment = ip_string.split(':').nth(2);
 
@@ -601,7 +590,7 @@ impl Engine {
 
                     let segment_value = i32::from_str_radix(segment, 16).unwrap_or(0);
                     let start = (segment_value % 20) as usize * 100;
-                    self.players.next(true, Some(start)).unwrap_or(0) as i32
+                    self.players.next(true, Some(start)).map(|id| id)
                 } else {
                     default()
                 }

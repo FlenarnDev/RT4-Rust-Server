@@ -11,7 +11,7 @@ use crate::entity::entity::EntityExt;
 use crate::entity::player::Player;
 use crate::game_connection::GameClient;
 use crate::grid::coord_grid::CoordGrid;
-use crate::io::client::protocol::client_protocol_repository::{get_decoder, get_handler, ClientProtocolRepository};
+use crate::io::client::protocol::client_protocol_repository::{get_decoder, get_handler};
 
 pub struct NetworkPlayer {
     pub player: Player,
@@ -65,7 +65,6 @@ impl NetworkPlayer {
         if !self.is_client_connected() {
             return false;
         }
-        debug!("user connected");
         
         self.player.last_connected = current_tick;
         
@@ -73,11 +72,9 @@ impl NetworkPlayer {
         self.client_limit = 0;
         self.restricted_limit = 0;
         
-        while self.user_limit < ClientProtocolCategory::USER_EVENT.limit && self.client_limit < ClientProtocolCategory::CLIENT_EVENT.limit && self.restricted_limit < ClientProtocolCategory::RESTRICTED_EVENT.limit && self.read() {
-        }
+        while self.user_limit < ClientProtocolCategory::USER_EVENT.limit && self.client_limit < ClientProtocolCategory::CLIENT_EVENT.limit && self.restricted_limit < ClientProtocolCategory::RESTRICTED_EVENT.limit && self.read() {}
         
         if self.bytes_read > 0 {
-            debug!("bytes read: {}", self.bytes_read);
             self.player.last_response = current_tick;
             self.bytes_read = 0;
         }
@@ -129,7 +126,6 @@ impl NetworkPlayer {
 
         self.client.read_packet_with_size(self.client.waiting as usize).unwrap();
         let packet_type = &BY_ID[self.client.opcode as usize].clone().unwrap();
-        debug!("received packet type: {:?}", packet_type);
         let decoder = get_decoder(packet_type);
 
         if let Some(decoder) = decoder {
@@ -181,7 +177,7 @@ impl NetworkPlayer {
     /// social
     pub fn on_login(&mut self) {
         let start = Instant::now();
-        self.initial_login();
+        self.initial_login_data();
         self.rebuild_normal(false);
         
         
@@ -189,7 +185,7 @@ impl NetworkPlayer {
         debug!("Processed on login in: {:?}", start.elapsed());
     }
 
-    fn initial_login(&mut self) {
+    fn initial_login_data(&mut self) {
         self.client.outbound.p1(2); // Staff mod level
         self.client.outbound.p1(0); // Blackmarks?
         self.client.outbound.p1(0); // Underage (false = 0)
@@ -197,7 +193,7 @@ impl NetworkPlayer {
         self.client.outbound.p1(0); // Parental Advert Consent
         self.client.outbound.p1(0); // Map Quick Chat
         self.client.outbound.p1(0); // Mouse Recorder
-        self.client.outbound.p2(self.player.pid); // Player ID
+        self.client.outbound.p2(self.player.pid as i32); // Player ID
         self.client.outbound.p1(1); // Player Member
         self.client.outbound.p1(1); // Members map
     }
@@ -261,6 +257,6 @@ impl NetworkPlayer {
 
 impl EntityExt for NetworkPlayer {
     fn id(&self) -> usize {
-        self.player.pid as usize
+        self.player.pid
     }
 }
