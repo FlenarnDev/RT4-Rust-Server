@@ -89,6 +89,21 @@ impl Packet {
     }
 
     #[inline(always)]
+    pub fn p2add(&mut self, value: i32) {
+        let b1 = (value >> 8) as u8;
+        let b2 = ((value & 0xFF)+ 128) as u8;
+        
+        if self.position + 1 < self.data.len() {
+            self.data[self.position] = b1;
+            self.data[self.position + 1] = b2;
+        } else {
+            self.data.push(b1);
+            self.data.push(b2);
+        }
+        self.position += 2;
+    }
+    
+    #[inline(always)]
     pub fn ip2(&mut self, value: i32) {
         let bytes = (value as u16).to_le_bytes();
         if self.position + 1 < self.data.len() {
@@ -124,11 +139,25 @@ impl Packet {
     pub fn p4(&mut self, value: i32) {
         let bytes = value.to_be_bytes();
         if self.position + 3 < self.data.len() {
-            // Fast path - write to existing buffer
             self.data[self.position..self.position + 4].copy_from_slice(&bytes);
         } else {
-            // Slow path - extend buffer
             self.data.extend_from_slice(&bytes);
+        }
+        self.position += 4;
+    }
+
+    #[inline(always)]
+    pub fn p4me(&mut self, value: i32) {
+        if self.position + 3 < self.data.len() {
+            self.data[self.position] = (value >> 16) as u8;
+            self.data[self.position + 1] = (value >> 24) as u8;
+            self.data[self.position + 2] = value as u8;
+            self.data[self.position + 3] = (value >> 8) as u8;
+        } else {
+            self.data.push((value >> 16) as u8);
+            self.data.push((value >> 24) as u8);
+            self.data.push(value as u8);
+            self.data.push((value >> 8) as u8);
         }
         self.position += 4;
     }
