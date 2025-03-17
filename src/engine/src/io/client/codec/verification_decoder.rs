@@ -12,7 +12,7 @@ impl MessageDecoder for VerificationDecoder {
         &ClientProtocol::VERIFICATION
     }
 
-    fn decode(&self, packet: &mut Packet, length: usize) -> Box<Self::Message> {
+    fn decode(&self, packet: &mut Packet, _length: usize) -> Box<Self::Message> {
         let verification = packet.g4();
         Box::new(VerificationMessage{verification})
     }

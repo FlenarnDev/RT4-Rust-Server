@@ -1,7 +1,7 @@
 use crate::entity::entity_lifecycle::EntityLifeCycle;
 use crate::grid::coord_grid::CoordGrid;
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Copy, Clone)]
 pub struct Entity {
     pub coord: CoordGrid,
     pub width: u8,

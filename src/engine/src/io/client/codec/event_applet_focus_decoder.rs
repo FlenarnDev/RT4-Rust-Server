@@ -12,7 +12,7 @@ impl MessageDecoder for EventAppletFocusDecoder {
         &ClientProtocol::EVENT_APPLET_FOCUS
     }
 
-    fn decode(&self, packet: &mut Packet, length: usize) -> Box<Self::Message> {
+    fn decode(&self, packet: &mut Packet, _length: usize) -> Box<Self::Message> {
         let focus: bool = packet.g1() == 1;
         Box::new(EventAppletFocusMessage{focus})
     }

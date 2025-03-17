@@ -1,5 +1,5 @@
 #[repr(u8)]
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Copy, Clone)]
 pub enum EntityLifeCycle {
     Forever = 0, // Never respawns or despawns, always in the world.
     Respawn = 1, // Entity added from engine that respawns later.

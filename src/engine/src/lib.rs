@@ -4,3 +4,4 @@ pub mod grid;
 mod engine_stat;
 mod game_connection;
 pub mod io;
+mod util;

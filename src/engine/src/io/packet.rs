@@ -60,17 +60,31 @@ impl Packet {
     }
 
     #[inline(always)]
+
     pub fn p1(&mut self, value: i32) {
-        self.data.extend_from_slice(&(value as u8).to_be_bytes());
+        let value_u8 = value as u8;
+        if self.position < self.data.len() {
+            self.data[self.position] = value_u8;
+        } else {
+            self.data.push(value_u8);
+        }
         self.position += 1;
     }
-
+    
     #[inline(always)]
     pub fn p2(&mut self, value: i32) {
-        self.data.extend_from_slice(&(value as u16).to_be_bytes());
+        let bytes = (value as u16).to_be_bytes();
+        if self.position + 1 < self.data.len() {
+            // Fast path - write to existing buffer
+            self.data[self.position] = bytes[0];
+            self.data[self.position + 1] = bytes[1];
+        } else {
+            // Slow path - extend buffer
+            self.data.extend_from_slice(&bytes);
+        }
         self.position += 2;
     }
-
+    
     #[inline(always)]
     pub fn p2add(&mut self, value: i32) {
         let b1 = (value >> 8) as u8;

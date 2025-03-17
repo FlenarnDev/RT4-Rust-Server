@@ -18,6 +18,7 @@ use crate::entity::entity_list::NetworkPlayerList;
 use crate::entity::network_player::NetworkPlayer;
 use crate::entity::npc::Npc;
 use crate::entity::player::Player;
+use crate::entity::window_status::WindowStatus;
 use crate::game_connection::GameClient;
 use crate::grid::coord_grid::CoordGrid;
 use crate::io::packet::Packet;
@@ -477,14 +478,22 @@ impl Engine {
                 return
             }
 
+            // Data here is unknown. 
+            // Populated through client script opcode [5600]. 
             let bytes1 = client.inbound().g1b();
+            
+            
             let adverts_suppressed = client.inbound().g1b();
             let client_signed = client.inbound().g1b();
+            
+            // Window status block
             let window_mode = window_mode::from_i8(client.inbound.g1b());
-            let canvas_width = client.inbound().g2();
-            let canvas_height = client.inbound().g2();
-            let anti_aliasing_mode = client.inbound().g1b();
-            let uid = client.inbound().gbytes(24);
+            let canvas_width = client.inbound().g2()  as u32;
+            let canvas_height = client.inbound().g2()  as u32;
+            let anti_aliasing_mode = client.inbound().g1b() as u32;
+            let window_status: WindowStatus = WindowStatus::new(window_mode, canvas_width, canvas_height, anti_aliasing_mode);
+            
+            let uuid = client.inbound().gbytes(24);
             let site_settings_cookie = client.inbound().gjstr(0);
             let affiliate_id = client.inbound().g4();
             let detail_options = client.inbound().g4();
@@ -523,7 +532,6 @@ impl Engine {
             let username_37 = rsa_packet_decrypted.g8();
 
             let password = rsa_packet_decrypted.gjstr(0);
-            debug!("Password: {}", password);
 
             if client.opcode == title_protocol::RECONNECT {
                 client.outbound.p1(login_out::RECONNECT_OK);
@@ -538,11 +546,9 @@ impl Engine {
                 client,
                 GameClient::new_dummy()
             ));
-
-            let player = Player::new(CoordGrid::from(3200, 0, 3200), 0, window_mode, Self::INVALID_PID);
-
+            
             let network_player = NetworkPlayer::new(
-                player,
+                Player::new(CoordGrid::from(3200, 0, 3200), 0, window_status, Self::INVALID_PID),
                 &mut new_client
             );
 

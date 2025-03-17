@@ -13,7 +13,7 @@ impl MessageDecoder for WindowStatusDecoder {
         &ClientProtocol::WINDOW_STATUS
     }
 
-    fn decode(&self, packet: &mut Packet, length: usize) -> Box<Self::Message> {
+    fn decode(&self, packet: &mut Packet, _length: usize) -> Box<Self::Message> {
         let window_mode=  window_mode::from_i8(packet.g1b());
         let canvas_width = packet.g2() as u32;
         let canvas_height = packet.g1() as u32;

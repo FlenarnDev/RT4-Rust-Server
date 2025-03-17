@@ -12,7 +12,7 @@ impl MessageDecoder for EventCameraPositionDecoder {
         &ClientProtocol::EVENT_CAMERA_POSITION
     }
 
-    fn decode(&self, packet: &mut Packet, length: usize) -> Box<Self::Message> {
+    fn decode(&self, packet: &mut Packet, _length: usize) -> Box<Self::Message> {
         let camera_pitch = packet.g2add();
         let camera_yaw = packet.ig2();
         Box::new(EventCameraPositionMessage{camera_pitch, camera_yaw})

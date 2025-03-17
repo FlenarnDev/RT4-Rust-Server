@@ -1,4 +1,5 @@
 #[repr(u8)]
+#[derive(Copy, Clone)]
 pub enum MoveRestrict {
     Normal = 0,
     Blocked = 1,

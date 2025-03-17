@@ -48,7 +48,8 @@ impl<T: EntityExt> EntityList<T> {
         }
 
         // If not found, search from index_padding to start
-        for index in self.index_padding..start {
+        let end = std::cmp::min(start, self.ids.len());
+        for index in self.index_padding..end {
             if self.ids[index] == -1 {
                 return Ok(index);
             }

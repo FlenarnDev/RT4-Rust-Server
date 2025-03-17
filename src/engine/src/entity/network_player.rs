@@ -184,7 +184,7 @@ impl NetworkPlayer {
         self.rebuild_normal(false);
         
         
-        self.player.entity.active = true;
+        self.player.set_active(true);
         debug!("Processed on login in: {:?}", start.elapsed());
     }
 
@@ -202,8 +202,8 @@ impl NetworkPlayer {
     }
     
     fn rebuild_normal(&mut self, reconnect: bool) {
-        let origin_x = CoordGrid::zone(self.player.origin_coord.x()) as i16;
-        let origin_z = CoordGrid::zone(self.player.origin_coord.z()) as i16;
+        let origin_x = CoordGrid::zone(self.player.get_origin_coord().x()) as i16;
+        let origin_z = CoordGrid::zone(self.player.get_origin_coord().z()) as i16;
         
         let reload_left_x = (origin_x - 4) << 3;
         let reload_right_x = (origin_x + 5) << 3;
@@ -217,8 +217,8 @@ impl NetworkPlayer {
             || self.player.entity.coord.z() > (reload_top_z - 1) as u16
             || reconnect
         {
-            self.write(RebuildNormal::new(CoordGrid::zone(self.player.entity.coord.x()) as i32, CoordGrid::zone(self.player.entity.coord.z()) as i32, self.player.entity.coord.local_x(), self.player.entity.coord.local_z()));
-            self.player.origin_coord.coord = self.player.entity.coord.coord;
+            self.write(RebuildNormal::new(CoordGrid::zone(self.player.get_coord().x()) as i32, CoordGrid::zone(self.player.get_coord().z()) as i32, self.player.get_coord().local_x(), self.player.get_coord().local_z()));
+            self.player.set_origin_coord(self.player.get_coord());
         }
     }
     
