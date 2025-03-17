@@ -200,14 +200,12 @@ impl Engine {
         self.players.for_each_mut(|network_player| {
             network_player.player.playtime += 1;
 
-            if network_player.is_client_connected()  {
-                if network_player.decode_in(self.current_tick) {
-
-                }
+            if network_player.is_client_connected() && network_player.decode_in(self.current_tick) {
+                
             }
         });
         
-        // TODO - decode packets
+        // TODO - client input tracking
         
         // TODO - process pathfinding/following
         self.cycle_stats[EngineStat::ClientsIn as usize] = start.elapsed();
@@ -386,9 +384,13 @@ impl Engine {
     /// Flush packets
     fn process_out(&mut self) {
         let start: Instant = Instant::now();
-        //for (pid, player) in &self.players {
+        self.players.for_each_mut(|network_player| {
+            if !network_player.is_client_connected() {
+                return;
+            }
             // TODO
-        //}
+            network_player.encode_out(self.current_tick);
+        });
         self.cycle_stats[EngineStat::ClientsOut as usize] = start.elapsed();
     }
     

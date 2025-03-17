@@ -1,6 +1,7 @@
 use crate::io::server::outgoing_message::OutgoingMessage;
 use crate::io::server::protocol::server_protocol_priority::ServerProtocolPriority;
 use std::collections::BTreeSet;
+use crate::entity::network_player::NetworkPlayer;
 
 #[derive(Debug)]
 pub struct RebuildNormal {
@@ -40,11 +41,5 @@ impl RebuildNormal {
         }
         
         result
-    }
-}
-
-impl OutgoingMessage for RebuildNormal {
-    fn priority(&self) -> ServerProtocolPriority {
-        ServerProtocolPriority::IMMEDIATE
     }
 }

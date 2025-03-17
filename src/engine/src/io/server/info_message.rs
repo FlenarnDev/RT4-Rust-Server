@@ -1,6 +1,3 @@
-use crate::io::server::outgoing_message::OutgoingMessage;
-use crate::io::server::protocol::server_protocol_priority::ServerProtocolPriority;
-
 #[derive(Debug)]
 pub struct InfoMessage {}
 
@@ -13,10 +10,3 @@ impl InfoMessage {
         false
     }
 }
-
-impl OutgoingMessage for InfoMessage {
-    fn priority(&self) -> ServerProtocolPriority {
-        ServerProtocolPriority::IMMEDIATE
-    }
-}
-

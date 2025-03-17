@@ -12,6 +12,7 @@ use crate::entity::player::Player;
 use crate::game_connection::GameClient;
 use crate::grid::coord_grid::CoordGrid;
 use crate::io::client::protocol::client_protocol_repository::{get_decoder, get_handler};
+use crate::io::server::model::if_opensub::If_OpenSub;
 
 pub struct NetworkPlayer {
     pub player: Player,
@@ -22,6 +23,8 @@ pub struct NetworkPlayer {
     pub client_limit: u8,
     pub restricted_limit: u8,
 
+    pub outgoing_messages: Vec<Box<dyn OutgoingMessage>>,
+    
     pub user_path: Vec<i32>,
     pub op_called: bool,
     pub bytes_read: usize,
@@ -35,6 +38,7 @@ impl NetworkPlayer {
             user_limit: 0,
             client_limit: 0,
             restricted_limit: 0,
+            outgoing_messages: Vec::new(),
             user_path: Vec::new(),
             op_called: false,
             bytes_read: 0,
@@ -48,6 +52,7 @@ impl NetworkPlayer {
             user_limit: 0,
             client_limit: 0,
             restricted_limit: 0,
+            outgoing_messages: Vec::new(),
             user_path: Vec::new(),
             op_called: false,
             bytes_read: 0,
@@ -83,6 +88,20 @@ impl NetworkPlayer {
         true
     }
     
+    pub fn encode_out(&mut self, current_tick: i32) {
+        if !self.is_client_connected() {
+            return;
+        }
+        
+        // TODO - modal refresh!
+
+        let messages = std::mem::take(&mut self.outgoing_messages);
+        for message in messages {
+            message.write_self(self);
+        }
+        self.outgoing_messages.clear();
+    }
+    
     #[inline]
     fn read(&mut self) -> bool {
         if !self.client.has_available(1).unwrap() {
@@ -101,7 +120,7 @@ impl NetworkPlayer {
             if let Some(packet_type) = &BY_ID[self.client.opcode as usize] {
                 self.client.waiting = packet_type.length;
             } else {
-                println!("Unknown packet type: {}", self.client.opcode);
+                debug!("Unknown packet type received: {}", self.client.opcode);
                 self.client.opcode = 0;
                 self.client.shutdown();
                 return false;
@@ -183,6 +202,11 @@ impl NetworkPlayer {
         self.initial_login_data();
         self.rebuild_normal(false);
         
+        // Initial interface settings.
+        let component = if self.player.window_status.window_mode.is_resizeable() { 746 } else { 548 };
+        let verify_id = self.player.get_incremented_verify_id();
+        self.write(If_OpenSub::new(component, false, verify_id));
+        
         
         self.player.set_active(true);
         debug!("Processed on login in: {:?}", start.elapsed());
@@ -230,11 +254,11 @@ impl NetworkPlayer {
         if message.priority() == ServerProtocolPriority::IMMEDIATE {
             self.write_inner(message);
         } else {
-            // TODO - buffer push
+            self.outgoing_messages.push(Box::new(message));
         }
     }
     
-    fn write_inner(&mut self, message: impl OutgoingMessage + 'static) {
+    pub(crate) fn write_inner(&mut self, message: impl OutgoingMessage + 'static) {
         if !self.is_client_connected() {
             return;
         }
@@ -249,13 +273,14 @@ impl NetworkPlayer {
         
         let protocol: ServerProtocol = encoder.protocol();
 
-        if !self.client.encryptor.is_none() {
+        if self.client.encryptor.is_some() {
             // TODO - ISAAC stuff
         } else {
             self.client.outbound.p1(protocol.id);
         }
 
         encoder.encode(&mut self.client.outbound, &message);
+        debug!("{:?}", self.client.outbound.data);
         self.client.write_packet().unwrap();
     }
 }

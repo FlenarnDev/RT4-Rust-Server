@@ -117,6 +117,10 @@ impl Player {
         self.verify_id
     }
     
+    pub(crate) fn get_incremented_verify_id(&mut self) -> u32 {
+        self.verify_id = self.verify_id +1;
+        self.get_verify_id()
+    }
     pub(crate) fn set_verify_id(&mut self, verify_id: u32) {
         self.verify_id = verify_id;
     }

@@ -7,10 +7,10 @@ pub struct Packet {
 
 // Helper function for branch prediction optimization
 macro_rules! likely {
-        ($expr:expr) => {
-            $expr
-        }
+    ($expr:expr) => {
+        $expr
     }
+}
 
 impl Packet {
     /// Create a 'Packet' with a fixed sized allocated buffer.
@@ -47,22 +47,30 @@ impl Packet {
         (self.len() - self.position) as i32
     }
 
-    /// Returns the total usize (length) of this 'Packet' allocated for storage of bytes.
     #[inline(always)]
     pub fn len(&self) -> usize {
         self.data.len()
     }
 
-    /// Returns true if the packet contains no data.
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
 
     #[inline(always)]
-
     pub fn p1(&mut self, value: i32) {
         let value_u8 = value as u8;
+        if self.position < self.data.len() {
+            self.data[self.position] = value_u8;
+        } else {
+            self.data.push(value_u8);
+        }
+        self.position += 1;
+    }
+
+    #[inline(always)]
+    pub fn p1add(&mut self, value: i32) {
+        let value_u8 = (value + 128) as u8;
         if self.position < self.data.len() {
             self.data[self.position] = value_u8;
         } else {
@@ -90,6 +98,21 @@ impl Packet {
         let b1 = (value >> 8) as u8;
         let b2 = ((value & 0xFF)+ 128) as u8;
         
+        if self.position + 1 < self.data.len() {
+            self.data[self.position] = b1;
+            self.data[self.position + 1] = b2;
+        } else {
+            self.data.push(b1);
+            self.data.push(b2);
+        }
+        self.position += 2;
+    }
+
+    #[inline(always)]
+    pub fn p2leadd(&mut self, value: i32) {
+        let b1 = (value + 128) as u8;
+        let b2 = (value >> 8) as u8;
+
         if self.position + 1 < self.data.len() {
             self.data[self.position] = b1;
             self.data[self.position + 1] = b2;
