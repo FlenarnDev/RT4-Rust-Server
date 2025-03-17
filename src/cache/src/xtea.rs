@@ -40,7 +40,7 @@ pub fn initialize_xtea() -> Result<bool, Box<dyn error::Error>> {
     let start = Instant::now();
     info!("Initializing XTEA module.");
     
-    let mut file = File::open("../../src/cacheLocal/XTEAkeys.json")?;
+    let mut file = File::open("../../src/cacheLocal/xteaKeys.json")?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
     

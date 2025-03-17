@@ -1,4 +1,3 @@
-use log::debug;
 use constants::window_mode::window_mode;
 use crate::io::client::codec::message_decoder::MessageDecoder;
 use crate::io::client::model::window_status::WindowStatusMessage;
