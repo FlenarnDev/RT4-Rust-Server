@@ -19,9 +19,9 @@ impl RebuildNormal {
     
     pub fn zone_z(&self) -> i32 { self.zone_z }
     
-    pub fn local_x(&self) -> i32 {self.coord_x }
+    pub fn coord_x(&self) -> i32 { self.coord_x }
     
-    pub fn local_z(&self) -> i32 {self.coord_z }
+    pub fn coord_z(&self) -> i32 { self.coord_z }
     
     pub fn mapsquares(&self) -> BTreeSet<i32> {
         let min_x: i32 = self.zone_x - 6;

@@ -20,6 +20,9 @@ impl ServerProtocol {
     pub const CLIENT_SETVARC_SMALL: ServerProtocol = ServerProtocol::new(65, 5);
     pub const CLIENT_SETVARC_LARGE: ServerProtocol = ServerProtocol::new(69, 8);
     
+    // Interfaces
+    pub const IF_OPENSUB: ServerProtocol = ServerProtocol::new(145, 5);
+    
     // Misc.
     pub const LOGOUT: ServerProtocol = ServerProtocol::new(86, 0);
     pub const UPDATE_RUNENERGY: ServerProtocol = ServerProtocol::new(234, 1);

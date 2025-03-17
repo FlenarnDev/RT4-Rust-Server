@@ -31,6 +31,7 @@ pub struct Player {
     
     pub last_response: i32,
     pub last_connected: i32,
+    pub verify_id: u32,
     // TODO - Active Script
 }
 
@@ -57,7 +58,8 @@ impl Player {
             logging_out: false,
             prevent_logout_until: -1,
             last_response: -1,
-            last_connected: -1
+            last_connected: -1,
+            verify_id: 0,
         }
     }
     
@@ -82,7 +84,8 @@ impl Player {
             logging_out: false,
             prevent_logout_until: -1,
             last_response: -1,
-            last_connected: -1
+            last_connected: -1,
+            verify_id: 0,
         }
     }
     
@@ -108,5 +111,13 @@ impl Player {
     
     pub(crate) fn set_active(&mut self, active: bool) {
         self.entity.active = active;
+    }
+    
+    pub(crate) fn get_verify_id(self) -> u32 {
+        self.verify_id
+    }
+    
+    pub(crate) fn set_verify_id(&mut self, verify_id: u32) {
+        self.verify_id = verify_id;
     }
 }

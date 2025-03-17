@@ -19,7 +19,7 @@ impl MessageEncoder<RebuildNormal> for RebuildNormalEncoder {
 
     fn encode(&self, packet: &mut Packet, message: &RebuildNormal) {
         let mut temporary_packet: Packet = Packet::from(vec![]);
-        temporary_packet.p2add(message.local_x());
+        temporary_packet.p2add(message.coord_x());
 
         for mapsquare in message.mapsquares() {
             let xtea_key = get_xtea_key_by_mapsquare(mapsquare);
@@ -38,7 +38,7 @@ impl MessageEncoder<RebuildNormal> for RebuildNormalEncoder {
         temporary_packet.p1(128);
         temporary_packet.p2(message.zone_x());
         temporary_packet.p2add(message.zone_z());
-        temporary_packet.p2add(message.local_z());
+        temporary_packet.p2add(message.coord_z());
         packet.p2(temporary_packet.data.len() as i32);
         packet.pbytes(&*temporary_packet.data, 0, temporary_packet.data.len());
     }
