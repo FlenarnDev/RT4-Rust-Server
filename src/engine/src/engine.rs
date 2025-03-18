@@ -22,6 +22,7 @@ use crate::entity::window_status::WindowStatus;
 use crate::game_connection::GameClient;
 use crate::grid::coord_grid::CoordGrid;
 use crate::io::packet::Packet;
+use crate::util::runescript_compiler::update_compiler;
 
 pub struct Engine {
     pub members: bool,
@@ -65,7 +66,8 @@ impl Engine {
     // TODO - mock function?
     
     pub fn start(&mut self, start_cycle: bool) {
-
+        let _ = update_compiler().map_err(|e| error!("Failed to update compiler: {}", e));
+        
         if let Err(e) = ensure_initialized() {
             error!("Failed to initialize cache in main thread: {}", e);
         } else {
