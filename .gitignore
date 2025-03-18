@@ -11,3 +11,4 @@ src/worldlist/target/
 src/proxy/target/
 
 src/cacheLocal/
+/src/engine/RuneScriptCompiler.jar
