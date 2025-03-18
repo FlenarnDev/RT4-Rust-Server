@@ -3,14 +3,13 @@ use std::fs;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use log::debug;
+use log::{debug, info};
 use reqwest::blocking;
 use sha2::Digest;
-use crate::script::script_provider;
 use crate::script::script_provider::ScriptProvider;
 
 pub fn update_compiler() -> Result<bool, Box<dyn Error>> {
-    debug!("Checking for compiler update.");
+    info!("Checking for compiler update.");
     let mut needs_update = false;
 
     if !Path::new("./RuneScriptCompiler.jar").exists() {
@@ -38,7 +37,7 @@ pub fn update_compiler() -> Result<bool, Box<dyn Error>> {
     }
 
     if needs_update {
-        debug!("Updating compiler.");
+        info!("Updating compiler.");
         let jar_url = format!(
             "https://github.com/LostCityRS/RuneScriptKt/releases/download/{}/RuneScriptCompiler.jar",
             ScriptProvider::COMPILER_VERSION
@@ -50,6 +49,6 @@ pub fn update_compiler() -> Result<bool, Box<dyn Error>> {
         fs::write("RuneScriptCompiler.jar", jar_bytes)?;
     }
 
-    debug!("Compiler is up to date.");
+    info!("Compiler is up to date.");
     Ok(true)
 }
