@@ -208,6 +208,8 @@ impl NetworkPlayer {
         self.write(If_OpenSub::new(component, false, verify_id));
         
         
+        
+        // TODO - last step
         self.player.set_active(true);
         debug!("Processed on login in: {:?}", start.elapsed());
     }
