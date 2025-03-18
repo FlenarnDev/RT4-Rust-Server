@@ -6,8 +6,8 @@ use std::path::Path;
 use log::debug;
 use reqwest::blocking;
 use sha2::Digest;
-
-const COMPILER_VERSION: i32 = 22;
+use crate::script::script_provider;
+use crate::script::script_provider::ScriptProvider;
 
 pub fn update_compiler() -> Result<bool, Box<dyn Error>> {
     debug!("Checking for compiler update.");
@@ -26,7 +26,7 @@ pub fn update_compiler() -> Result<bool, Box<dyn Error>> {
 
         let sha_url = format!(
             "https://github.com/LostCityRS/RuneScriptKt/releases/download/{}/RuneScriptCompiler.jar.sha256",
-            COMPILER_VERSION
+            ScriptProvider::COMPILER_VERSION
         );
 
         let sha_response = blocking::get(&sha_url)?;
@@ -41,7 +41,7 @@ pub fn update_compiler() -> Result<bool, Box<dyn Error>> {
         debug!("Updating compiler.");
         let jar_url = format!(
             "https://github.com/LostCityRS/RuneScriptKt/releases/download/{}/RuneScriptCompiler.jar",
-            COMPILER_VERSION
+            ScriptProvider::COMPILER_VERSION
         );
 
         let jar_response = blocking::get(&jar_url)?;
