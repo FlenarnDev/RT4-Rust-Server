@@ -29,6 +29,9 @@ pub (crate) enum Js5Request {
     Invalid
 }
 
+// TODO - split into separate handlers
+// TODO - add request limit handling.
+
 impl Js5Request {
     pub fn fulfill_request(connection: &mut Connection, request: &Js5Request) -> Result<(), Box<dyn Error>> {
         // Ensure the cache is initialized in this thread before proceeding

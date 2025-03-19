@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::fmt::Debug;
 use crate::entity::network_player::NetworkPlayer;
 use crate::io::server::info_message::InfoMessage;
@@ -25,6 +24,6 @@ macro_rules! impl_outgoing_message {
     };
 }
 
-impl_outgoing_message!(If_OpenSub, ServerProtocolPriority::BUFFERED);
+impl_outgoing_message!(If_OpenSub, ServerProtocolPriority::IMMEDIATE);
 impl_outgoing_message!(RebuildNormal, ServerProtocolPriority::IMMEDIATE);
 impl_outgoing_message!(InfoMessage, ServerProtocolPriority::IMMEDIATE);
