@@ -1,10 +1,9 @@
-use crate::entity::entity::Entity;
+use crate::entity::entity::{Entity, NonPathingEntity};
 use crate::entity::entity_lifecycle::EntityLifeCycle;
 use crate::grid::coord_grid::CoordGrid;
 
-#[derive(Eq, Hash, PartialEq)]
 pub struct Loc {
-    pub entity: Entity,
+    pub entity: NonPathingEntity,
     pub info: u32,
 }
 
@@ -19,7 +18,7 @@ impl Loc {
         angle: u8
     ) -> Loc {
         Loc {
-            entity: Entity::new(
+            entity: NonPathingEntity::new(
                 coord,
                 width,
                 length,

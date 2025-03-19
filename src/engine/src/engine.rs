@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-use std::collections::{HashMap};
 use std::net::{IpAddr, TcpListener};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -14,9 +12,10 @@ use constants::title_protocol::title_protocol;
 use crate::io::client_state::ConnectionState;
 use crate::io::rsa::rsa;
 use crate::engine_stat::EngineStat;
-use crate::entity::entity_list::NetworkPlayerList;
+use crate::entity::entity::EntityBehavior;
+use crate::entity::entity_list::{NPCList, NetworkPlayerList};
 use crate::entity::network_player::NetworkPlayer;
-use crate::entity::npc::Npc;
+use crate::entity::npc::NPC;
 use crate::entity::player::Player;
 use crate::entity::window_status::WindowStatus;
 use crate::game_connection::GameClient;
@@ -33,7 +32,7 @@ pub struct Engine {
     pub cycle_stats: Vec<Duration>,
     pub last_cycle_stats: Vec<Duration>,
     pub players: NetworkPlayerList,
-    pub npcs: HashMap<i32, RefCell<Npc>>,
+    pub npcs: NPCList,
     pub new_players: Arc<Mutex<Vec<NetworkPlayer>>>,
     // TODO - game_map
     // TODO - zone_tracking
@@ -58,7 +57,7 @@ impl Engine {
             cycle_stats: vec![Duration::new(0, 0); 12],
             last_cycle_stats: vec![Duration::new(0, 0); 12],
             players: NetworkPlayerList::new(Engine::MAX_PLAYERS - 1),
-            npcs: HashMap::with_capacity(Engine::MAX_NPCS - 1),
+            npcs: NPCList::new(Engine::MAX_NPCS - 1),
             new_players: Default::default(),
         }
     }
@@ -66,19 +65,27 @@ impl Engine {
     // TODO - mock function?
     
     pub fn start(&mut self, start_cycle: bool) {
-        let _ = update_compiler().map_err(|e| error!("Failed to update compiler: {}", e));
+        if let Err(e) = update_compiler() {
+            error!("Failed to update compiler: {}", e);
+        }
+        
+        
         
         if let Err(e) = ensure_initialized() {
-            error!("Failed to initialize cache in main thread: {}", e);
+            error!("Failed to initialize cache: {}", e);
         } else {
-            debug!("Cache successfully initialized in main thread");
+            debug!("Cache successfully initialized.");
         }
 
-        initialize_xtea().expect("Failed to initialize XTEA module.");
+        if let Err(e) = initialize_xtea() {
+            error!("Failed to initialize XTEA module: {}", e);
+        } else {
+            debug!("XTEA module initialized.");
+        }
+        
         
         info!("Starting server on port 40001");
         let listen_addr = "127.0.0.1:40001";
-        
         let thread_new_players = Arc::clone(&self.new_players);
         
         thread::spawn(move || {
@@ -178,14 +185,13 @@ impl Engine {
 
         // NPC [ai_spawn] scripts
         // NPC hunt players if not busy
-        for (nid, npc) in &self.npcs {
+        self.npcs.for_each_mut(|npc| {
             // Check if npc is active
-            if npc.borrow().entity.active {
+            if npc.active() {
                 // Hunts will process even if the npc is delayed during this portion
                 // TODO
             }
-        }
-
+        });
         self.cycle_stats[EngineStat::World as usize] = start.elapsed();
     }
 
@@ -281,7 +287,7 @@ impl Engine {
             }
 
             if (network_player.player.logging_out) && (force || self.current_tick >= network_player.player.prevent_logout_until) {
-                pids_to_remove.push(network_player.player.pid);
+                pids_to_remove.push(network_player.player.get_pid());
             }
         }) ;
         
@@ -323,7 +329,7 @@ impl Engine {
             match self.get_next_pid(Some(&network_player.client)) { 
                 Ok(pid) =>  {
                     network_player.client.write_packet().expect("Failed to write packet to new connection");
-                    network_player.player.pid = pid;
+                    network_player.player.set_pid(pid);
                     self.players.set(pid, network_player).expect("Failed to set player!");
                     if let Some(mut player_ref) = self.players.get_mut(pid) {
                         player_ref.on_login()
@@ -423,37 +429,25 @@ impl Engine {
         self.cycle_stats[EngineStat::Cleanup as usize] = start.elapsed();
     }
     
-    pub fn add_player(&mut self, player: NetworkPlayer) {
-        //self.players.insert(player.player.uid, RefCell::new(player));
-    }
-    
-    /*pub fn get_player(&self, uid: i32) -> Result<Ref<Player>, String> {
-        match self.players.get(&uid) {
-            None => Err(format!("Player with uid {} not found in engine", uid)),
-            Some(player_ref) => Ok(player_ref.borrow().player)
-        }
-    }*/
-    
     pub fn remove_player(&mut self, pid: usize) {
-        if let Some(mut player_ref) = self.players.get_mut(pid) {
-            if player_ref.is_client_connected() {
-                player_ref.client.shutdown();
+        if let Some(mut network_player) = self.players.get_mut(pid) {
+            if network_player.is_client_connected() {
+                network_player.client.shutdown();
             }
 
-            player_ref.player.entity.active = false;
+            network_player.player.set_active(false);
         }
         self.players.remove(pid);
     }
 
     fn on_new_connection(client: &mut GameClient, thread_player: Arc<Mutex<Vec<NetworkPlayer>>>) {
-        client.read_packet_with_size(1).unwrap();
-
-        if client.inbound.remaining() < 1 {
-            debug!("Connection closed, no data received");
+        if let Err(err) = client.read_packet_with_size(1) {
+            error!("Failed to read packet from client: {}", err);
             client.shutdown();
             return
         }
 
+        
         client.opcode = client.inbound().g1();
 
         if client.opcode == title_protocol::INIT_GAME_CONNECTION {
@@ -552,13 +546,14 @@ impl Engine {
             ));
             
             let network_player = NetworkPlayer::new(
-                Player::new(CoordGrid::from(3200, 0, 3200), 0, window_status, Self::INVALID_PID),
+                Player::new(CoordGrid::from(3200, 0, 3200), 0, window_status, 0, Self::INVALID_PID),
                 &mut new_client
             );
 
             let mut players_lock = thread_player.lock().unwrap();
             players_lock.push(network_player);
         } else {
+            debug!("Invalid opcode from initial connection: [{}]", client.opcode);
             client.outbound.p1(login_out::INVALID_LOGIN_PACKET);
             client.write_packet().expect("Failed to write packet to new connection");
             client.shutdown();

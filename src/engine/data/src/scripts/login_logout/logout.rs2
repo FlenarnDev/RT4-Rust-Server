@@ -1,0 +1,3 @@
+[logout,_]()(boolean)
+mes("Logging out");
+return(true);

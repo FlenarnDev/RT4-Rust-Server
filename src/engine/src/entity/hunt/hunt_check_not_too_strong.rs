@@ -1,5 +1,5 @@
 #[repr(u8)]
 pub enum HuntCheckNotTooStrong {
-    OFF,
+    Off,
     OUTSIDE_WILDERNESS,
 }

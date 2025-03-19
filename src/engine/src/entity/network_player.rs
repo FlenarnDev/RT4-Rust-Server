@@ -7,7 +7,7 @@ use crate::io::server::outgoing_message::OutgoingMessage;
 use crate::io::server::protocol::server_protocol::ServerProtocol;
 use crate::io::server::protocol::server_protocol_priority::ServerProtocolPriority;
 use crate::io::server::protocol::server_protocol_repository::SERVER_PROTOCOL_REPOSITORY;
-use crate::entity::entity::EntityExt;
+use crate::entity::entity::EntityBehavior;
 use crate::entity::player::Player;
 use crate::game_connection::GameClient;
 use crate::grid::coord_grid::CoordGrid;
@@ -215,14 +215,14 @@ impl NetworkPlayer {
     }
 
     fn initial_login_data(&mut self) {
-        self.client.outbound.p1(2); // Staff mod level
+        self.client.outbound.p1(self.player.get_staff_mod_level()); // Staff mod level
         self.client.outbound.p1(0); // Blackmarks?
         self.client.outbound.p1(0); // Underage (false = 0)
         self.client.outbound.p1(0); // Parental Chat consent
         self.client.outbound.p1(0); // Parental Advert Consent
         self.client.outbound.p1(0); // Map Quick Chat
         self.client.outbound.p1(0); // Mouse Recorder
-        self.client.outbound.p2(self.player.pid as i32); // Player ID
+        self.client.outbound.p2(self.player.get_pid() as i32); // Player ID
         self.client.outbound.p1(1); // Player Member
         self.client.outbound.p1(1); // Members map
     }
@@ -237,10 +237,10 @@ impl NetworkPlayer {
         let reload_bottom_z = (origin_z - 4) << 3;
         
         // If the build area should be regenerated, do so now
-        if self.player.entity.coord.x() < reload_left_x as u16
-            || self.player.entity.coord.z() < reload_bottom_z as u16
-            || self.player.entity.coord.x() > (reload_right_x - 1) as u16
-            || self.player.entity.coord.z() > (reload_top_z - 1) as u16
+        if self.player.coord().x() < reload_left_x as u16
+            || self.player.coord().z() < reload_bottom_z as u16
+            || self.player.coord().x() > (reload_right_x - 1) as u16
+            || self.player.coord().z() > (reload_top_z - 1) as u16
             || reconnect
         {
             self.write(RebuildNormal::new(CoordGrid::zone(self.player.get_coord().x()) as i32, CoordGrid::zone(self.player.get_coord().z()) as i32, self.player.get_coord().local_x(), self.player.get_coord().local_z()));
@@ -284,11 +284,5 @@ impl NetworkPlayer {
         encoder.encode(&mut self.client.outbound, &message);
         debug!("{:?}", self.client.outbound.data);
         self.client.write_packet().unwrap();
-    }
-}
-
-impl EntityExt for NetworkPlayer {
-    fn id(&self) -> usize {
-        self.player.pid
     }
 }
