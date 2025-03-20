@@ -12,7 +12,8 @@ use crate::entity::player::Player;
 use crate::game_connection::GameClient;
 use crate::grid::coord_grid::CoordGrid;
 use crate::io::client::protocol::client_protocol_repository::{get_decoder, get_handler};
-use crate::io::server::model::if_opensub::If_OpenTop;
+use crate::io::server::model::if_opensub::If_OpenSub;
+use crate::io::server::model::if_opentop::If_OpenTop;
 
 pub struct NetworkPlayer {
     pub player: Player,
@@ -204,9 +205,9 @@ impl NetworkPlayer {
         
         // Initial interface settings.
         let component = if self.player.window_status.window_mode.is_resizeable() { 746 } else { 548 };
-        let verify_id = self.player.get_incremented_verify_id();
-        self.write(If_OpenTop::new(component, false, verify_id));
-        
+       
+        self.write(If_OpenTop::new(component, false, self.player.get_incremented_verify_id()));
+        self.write(If_OpenSub::new())
         
         
         // TODO - last step

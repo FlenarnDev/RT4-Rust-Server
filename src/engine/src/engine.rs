@@ -21,7 +21,9 @@ use crate::entity::window_status::WindowStatus;
 use crate::game_connection::GameClient;
 use crate::grid::coord_grid::CoordGrid;
 use crate::io::packet::Packet;
+use crate::util::pack_file::revalidate_pack;
 use crate::util::runescript_compiler::update_compiler;
+use crate::util::symbols::generate_server_symbols;
 
 pub struct Engine {
     pub members: bool,
@@ -68,9 +70,10 @@ impl Engine {
         if let Err(e) = update_compiler() {
             error!("Failed to update compiler: {}", e);
         }
-        
-        
-        
+
+        revalidate_pack();
+        generate_server_symbols();
+
         if let Err(e) = ensure_initialized() {
             error!("Failed to initialize cache: {}", e);
         } else {
@@ -82,8 +85,8 @@ impl Engine {
         } else {
             debug!("XTEA module initialized.");
         }
-        
-        
+
+
         info!("Starting server on port 40001");
         let listen_addr = "127.0.0.1:40001";
         let thread_new_players = Arc::clone(&self.new_players);
@@ -447,7 +450,7 @@ impl Engine {
             return
         }
 
-        
+
         client.opcode = client.inbound().g1();
 
         if client.opcode == title_protocol::INIT_GAME_CONNECTION {

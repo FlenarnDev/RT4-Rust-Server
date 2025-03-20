@@ -183,6 +183,22 @@ impl Packet {
     }
 
     #[inline(always)]
+    pub fn p4rme(&mut self, value: i32) {
+        if self.position + 3 < self.data.len() {
+            self.data[self.position] = (value >> 8) as u8;
+            self.data[self.position + 1] = value as u8;
+            self.data[self.position + 2] = (value >> 24) as u8;
+            self.data[self.position + 3] = (value >> 16) as u8;
+        } else {
+            self.data.push((value >> 8) as u8);
+            self.data.push(value as u8);
+            self.data.push((value >> 24) as u8);
+            self.data.push((value >> 16) as u8);
+        }
+        self.position += 4;
+    }
+
+    #[inline(always)]
     pub fn ip4(&mut self, value: i32) {
         let bytes = value.to_le_bytes();
         if self.position + 3 < self.data.len() {
