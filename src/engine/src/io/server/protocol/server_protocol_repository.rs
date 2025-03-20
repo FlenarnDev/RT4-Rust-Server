@@ -1,9 +1,9 @@
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
-use crate::io::server::codec::if_opensub_encoder::If_OpenSubEncoder;
+use crate::io::server::codec::if_opensub_encoder::If_OpenTopEncoder;
 use crate::io::server::codec::message_encoder::MessageEncoder;
 use crate::io::server::codec::rebuild_normal_encoder::RebuildNormalEncoder;
-use crate::io::server::model::if_opensub::If_OpenSub;
+use crate::io::server::model::if_opensub::If_OpenTop;
 use crate::io::server::model::rebuild_normal::RebuildNormal;
 use crate::io::server::outgoing_message::OutgoingMessage;
 
@@ -22,7 +22,7 @@ impl ServerProtocolRepository {
         };
         
         repository.bind::<RebuildNormal>(RebuildNormalEncoder::new());
-        repository.bind::<If_OpenSub>(If_OpenSubEncoder::new());
+        repository.bind::<If_OpenTop>(If_OpenTopEncoder::new());
         
         repository
     }

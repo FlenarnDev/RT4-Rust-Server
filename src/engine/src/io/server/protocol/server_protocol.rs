@@ -21,7 +21,8 @@ impl ServerProtocol {
     pub const CLIENT_SETVARC_LARGE: ServerProtocol = ServerProtocol::new(69, 8);
     
     // Interfaces
-    pub const IF_OPENSUB: ServerProtocol = ServerProtocol::new(145, 5);
+    pub const IF_OPENTOP: ServerProtocol = ServerProtocol::new(145, 5);
+    pub const IF_OPENSUB: ServerProtocol = ServerProtocol::new(155, 9);
     
     // Misc.
     pub const LOGOUT: ServerProtocol = ServerProtocol::new(86, 0);

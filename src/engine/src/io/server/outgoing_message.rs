@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use crate::entity::network_player::NetworkPlayer;
 use crate::io::server::info_message::InfoMessage;
-use crate::io::server::model::if_opensub::If_OpenSub;
+use crate::io::server::model::if_opensub::If_OpenTop;
 use crate::io::server::model::rebuild_normal::RebuildNormal;
 use crate::io::server::protocol::server_protocol_priority::ServerProtocolPriority;
 
@@ -24,6 +24,6 @@ macro_rules! impl_outgoing_message {
     };
 }
 
-impl_outgoing_message!(If_OpenSub, ServerProtocolPriority::IMMEDIATE);
+impl_outgoing_message!(If_OpenTop, ServerProtocolPriority::IMMEDIATE);
 impl_outgoing_message!(RebuildNormal, ServerProtocolPriority::IMMEDIATE);
 impl_outgoing_message!(InfoMessage, ServerProtocolPriority::IMMEDIATE);
