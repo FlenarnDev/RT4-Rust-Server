@@ -14,8 +14,7 @@ impl MessageEncoder<If_OpenTop> for If_OpenTopEncoder {
     fn protocol(&self) -> ServerProtocol { ServerProtocol::IF_OPENTOP }
 
     fn encode(&self, packet: &mut Packet, message: &If_OpenTop) {
-        debug!("{:?}", message);
-        packet.p2leadd(message.id as i32);
+        packet.p2leadd(message.interface_id as i32);
         packet.p1add(message.interface_type as i32);
         packet.p2leadd(message.verify_id as i32);
     }

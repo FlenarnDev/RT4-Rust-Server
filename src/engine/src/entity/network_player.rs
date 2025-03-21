@@ -204,10 +204,13 @@ impl NetworkPlayer {
         self.rebuild_normal(false);
         
         // Initial interface settings.
-        let component = if self.player.window_status.window_mode.is_resizeable() { 746 } else { 548 };
+        let window_id = if self.player.window_status.window_mode.is_resizeable() { 746 } else { 548 };
+        let mut verify_id = self.player.get_incremented_verify_id();
        
-        self.write(If_OpenTop::new(component, false, self.player.get_incremented_verify_id()));
-        self.write(If_OpenSub::new())
+        self.write(If_OpenTop::new(window_id, false, verify_id));
+        verify_id = self.player.get_incremented_verify_id();
+        self.write(If_OpenSub::new(window_id, 100, 662, 1, verify_id));
+        //self.write(If_OpenSub::new(752, 8, 137, 0, self.player.get_incremented_verify_id()));
         
         
         // TODO - last step
@@ -283,7 +286,6 @@ impl NetworkPlayer {
         }
 
         encoder.encode(&mut self.client.outbound, &message);
-        debug!("{:?}", self.client.outbound.data);
         self.client.write_packet().unwrap();
     }
 }
