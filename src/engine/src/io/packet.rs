@@ -470,26 +470,17 @@ impl Packet {
     /// Reads a string from the internal buffer until a terminator byte is encountered.
     #[inline(always)]
     pub fn gjstr(&mut self, terminator: u8) -> String {
-        let start_pos = self.position;
+        let mut result = String::new();
 
-        // Find terminator
-        while self.position < self.data.len() && self.data[self.position] != terminator {
+        while self.position < self.data.len() {
+            let b = self.data[self.position];
             self.position += 1;
-        }
 
-        // Create string from data
-        let result = if start_pos < self.position {
-            match std::str::from_utf8(&self.data[start_pos..self.position]) {
-                Ok(s) => s.to_owned(),
-                Err(_) => String::new(), // Handle invalid UTF-8
+            if b == terminator {
+                break;
             }
-        } else {
-            String::new()
-        };
 
-        // Skip past terminator if we found it
-        if self.position < self.data.len() {
-            self.position += 1;
+            result.push(b as char);
         }
 
         result

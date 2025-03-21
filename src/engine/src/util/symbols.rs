@@ -28,5 +28,6 @@ pub fn generate_server_symbols() {
         line.push('\n');
         command_symbols.push_str(&line);
     }
-    fs::write("./data/symbols/commands.sym", command_symbols).expect("Failed to write to command symbols file");
+    // TODO - Disabled for now, waiting on fix to compiler to handle no-pointer setups.
+    //fs::write("./data/symbols/commands.sym", command_symbols).expect("Failed to write to command symbols file");
 }
