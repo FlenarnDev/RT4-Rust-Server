@@ -21,6 +21,7 @@ use crate::entity::window_status::WindowStatus;
 use crate::game_connection::GameClient;
 use crate::grid::coord_grid::CoordGrid;
 use crate::io::packet::Packet;
+use crate::script::script_provider::ScriptProvider;
 use crate::util::pack_file::revalidate_pack;
 use crate::util::runescript_compiler::update_compiler;
 use crate::util::symbols::generate_server_symbols;
@@ -85,6 +86,8 @@ impl Engine {
         } else {
             debug!("XTEA module initialized.");
         }
+
+        ScriptProvider::load();
 
 
         info!("Starting server on port 40001");

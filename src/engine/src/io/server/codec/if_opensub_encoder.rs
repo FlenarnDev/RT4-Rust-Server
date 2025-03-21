@@ -16,8 +16,8 @@ impl MessageEncoder<If_OpenSub> for If_OpenSubEncoder {
     fn encode(&self, packet: &mut Packet, message: &If_OpenSub) {
         packet.p1(message.flags as i32);
         
-        // TODO - research client side, why is this necessary? Gone by 578/alternative logic.
-        let component_pointer = message.window_id * 65536 + message.component_id;
+        let component_pointer = message.window_id << 16 | message.component_id;
+        
         packet.p4me(component_pointer as i32);
         packet.p2leadd(message.verify_id as i32);
         packet.p2(message.interface_id as i32);

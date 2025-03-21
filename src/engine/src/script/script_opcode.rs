@@ -1,5 +1,7 @@
+use strum_macros::EnumIter;
+
 #[repr(i32)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
 pub enum ScriptOpcode {
     // Core language ops (0-99)
     PUSH_CONSTANST_INT = 0,

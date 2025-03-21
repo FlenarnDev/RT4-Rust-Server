@@ -1,4 +1,4 @@
 // Core language ops (0-99)
 
 // info: Send a message to the chatbox
-[command,mes](string $text)
+[command,mes](string $message)

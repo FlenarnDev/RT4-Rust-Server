@@ -395,10 +395,7 @@ impl Packet {
         let pos = self.position;
         self.position += 4;
 
-        ((self.data[pos] as i32) << 24) |
-            ((self.data[pos + 1] as i32) << 16) |
-            ((self.data[pos + 2] as i32) << 8) |
-            (self.data[pos + 3] as i32)
+        ((self.data[pos] as i32) << 24) | ((self.data[pos + 1] as i32) << 16) | ((self.data[pos + 2] as i32) << 8) | (self.data[pos + 3] as i32)
     }
 
     #[inline(always)]

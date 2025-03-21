@@ -4,14 +4,14 @@ use crate::script::script_opcode::ScriptOpcode;
 const POINTER_GROUP_FIND: [&str; 5] = ["find_player", "find_npc", "find_loc", "fond_obj", "find_db"];
 
 #[derive(Debug, Default)]
-struct ScriptOpcodePointers {
-    require: Option<Vec<String>>,
-    set: Option<Vec<String>>,
-    corrupt: Option<Vec<String>>,
-    require2: Option<Vec<String>>,
-    set2: Option<Vec<String>>,
-    corrupt2: Option<Vec<String>>,
-    conditional: Option<bool>,
+pub struct ScriptOpcodePointers {
+    pub(crate) require: Option<Vec<String>>,
+    pub(crate) set: Option<Vec<String>>,
+    pub(crate) corrupt: Option<Vec<String>>,
+    pub(crate) require2: Option<Vec<String>>,
+    pub(crate) set2: Option<Vec<String>>,
+    pub(crate) corrupt2: Option<Vec<String>>,
+    pub(crate) conditional: Option<bool>,
 }
 
 impl ScriptOpcodePointers {
@@ -64,14 +64,17 @@ macro_rules! script_opcode {
         )
     };
 }
-fn initialize_script_opcode_pointers() {
+pub fn initialize_script_opcode_pointers() -> HashMap<ScriptOpcode, ScriptOpcodePointers> {
     let mut script_opcode_pointers: HashMap<ScriptOpcode, ScriptOpcodePointers> = HashMap::new();
 
     let opcodes = vec![
         script_opcode!(ScriptOpcode::ALLOWDESIGN, { require: ["active_player"] }),
         script_opcode!(ScriptOpcode::ANIM, { require: ["active_player"], require2: ["active_player2"] }),
     ];
+    
     for (name, opcode) in opcodes {
         script_opcode_pointers.insert(name, opcode);
     }
+    
+    script_opcode_pointers
 }

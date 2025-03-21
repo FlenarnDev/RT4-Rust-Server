@@ -1,4 +1,7 @@
 use std::fs;
+use strum::IntoEnumIterator;
+use crate::script::script_opcode::ScriptOpcode;
+use crate::script::script_opcode_pointers::initialize_script_opcode_pointers;
 use crate::util::namemap::load_pack;
 
 pub fn generate_server_symbols() {
@@ -12,5 +15,18 @@ pub fn generate_server_symbols() {
         }
     }
     
-    fs::write("./data/symbols/runescript.sym", script_symbols).expect("Failed to write to symbols file");
+    fs::write("./data/symbols/runescript.sym", script_symbols).expect("Failed to write to RuneScript symbols file");
+    
+    let mut command_symbols = String::new();
+    
+    for opcode in ScriptOpcode::iter() {
+        let opcode_value = opcode as i32;
+        let command_name = format!("{:?}", opcode).to_lowercase();
+        
+        let mut line = format!("{}\t{}", opcode_value, command_name);
+        
+        line.push('\n');
+        command_symbols.push_str(&line);
+    }
+    fs::write("./data/symbols/commands.sym", command_symbols).expect("Failed to write to command symbols file");
 }
