@@ -1,5 +1,6 @@
 use std::time::Instant;
 use log::{debug, error};
+use crate::engine::Engine;
 use crate::io::client::protocol::client_protocol::BY_ID;
 use crate::io::client::protocol::client_protocol_category::ClientProtocolCategory;
 use crate::io::server::model::rebuild_normal::RebuildNormal;
@@ -14,6 +15,8 @@ use crate::grid::coord_grid::CoordGrid;
 use crate::io::client::protocol::client_protocol_repository::{get_decoder, get_handler};
 use crate::io::server::model::if_opensub::If_OpenSub;
 use crate::io::server::model::if_opentop::If_OpenTop;
+use crate::script::script_provider::ScriptProvider;
+use crate::script::server_trigger_types::ServerTriggerTypes;
 
 pub struct NetworkPlayer {
     pub player: Player,
@@ -212,6 +215,10 @@ impl NetworkPlayer {
         self.write(If_OpenSub::new(window_id, 100, 662, 1, verify_id));
         //self.write(If_OpenSub::new(752, 8, 137, 0, self.player.get_incremented_verify_id()));
         
+        let login_trigger = ScriptProvider::get_by_trigger_specific(ServerTriggerTypes::LOGIN, -1, -1);
+        if let Some(trigger) = login_trigger {
+            
+        }
         
         // TODO - last step
         self.player.set_active(true);

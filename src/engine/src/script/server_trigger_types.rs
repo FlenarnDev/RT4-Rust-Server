@@ -1,4 +1,4 @@
-#[repr(u32)]
+#[repr(i32)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ServerTriggerTypes {
     PROC = 0,

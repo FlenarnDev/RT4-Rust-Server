@@ -5,6 +5,8 @@ fn main() {
         std::env::set_var("RUST_LOG", "debug");
     }
     env_logger::init();
-    
-    Engine::new().start(true);
+
+    Engine::init();
+
+    Engine::get().start(true);
 }

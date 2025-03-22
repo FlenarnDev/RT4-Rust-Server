@@ -129,7 +129,7 @@ impl ScriptFile {
         
         let switches = packet.g1();
         for _i in 0..switches {
-            let mut count = packet.g2();
+            let count = packet.g2();
             let mut table: SwitchTable = SwitchTable::new();
             
             for j in 0..count {

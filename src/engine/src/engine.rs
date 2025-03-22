@@ -1,5 +1,6 @@
 use std::net::{IpAddr, TcpListener};
-use std::sync::{Arc, Mutex};
+use std::ptr::null_mut;
+use std::sync::{Arc, Mutex, Once};
 use std::thread;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
@@ -41,6 +42,9 @@ pub struct Engine {
     // TODO - zone_tracking
 }
 
+static mut ENGINE: Option<Engine> = None;
+static INIT: Once = Once::new();
+
 impl Engine {
     const MAX_PLAYERS: usize = 2048;
     const MAX_NPCS: usize = 8192;
@@ -51,6 +55,35 @@ impl Engine {
     const AFK_EVENTRATE: i32 = 500;
     
     const INVALID_PID: usize = 5000;
+    
+    // We don't need safety, we're smart
+    pub fn init() {
+        INIT.call_once(|| {
+            info!("Initializing global engine instance.");
+            unsafe {
+                ENGINE = Some(Engine::new());
+            }
+        })
+    }
+    
+    pub fn get() -> &'static mut Engine {
+        unsafe {
+            match &mut ENGINE {
+                Some(engine) => engine,
+                None => {
+                    // Auto-initialize if needed;
+                    Self::init();
+                    ENGINE.as_mut().unwrap()
+                }
+            }
+        }
+    }
+
+    pub fn current_tick() -> i32 {
+        let tick = Self::get().current_tick;
+        debug!("current_tick() returning: {}", tick);
+        tick
+    }
     
     pub fn new() -> Engine {
         Engine { 
