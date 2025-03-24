@@ -1,6 +1,7 @@
+use std::cmp::PartialEq;
 use std::error::Error;
 use crate::entity::block_walk::BlockWalk;
-use crate::entity::entity::{EntityBehavior, PathingEntity};
+use crate::entity::entity::{Entity, EntityBehavior};
 use crate::entity::entity_lifecycle::EntityLifeCycle;
 use crate::entity::move_restrict::MoveRestrict;
 use crate::entity::move_strategy::MoveStrategy;
@@ -8,7 +9,10 @@ use crate::entity::window_status::WindowStatus;
 use crate::grid::coord_grid::CoordGrid;
 use constants::window_mode::window_mode;
 use log::debug;
+use crate::entity::entity_type::EntityType;
+use crate::entity::pathing_entity::PathingEntity;
 use crate::script::script_pointer::ScriptPointer;
+use crate::script::script_runner::ScriptRunner;
 use crate::script::script_state::ScriptState;
 
 pub struct LevelExperience {
@@ -48,6 +52,7 @@ impl LevelExperience {
 }
 
 
+#[derive(Clone, PartialEq)]
 pub struct Player {
     // Permanent
     pub pathing_entity: PathingEntity,
@@ -75,13 +80,12 @@ pub struct Player {
     pub last_connected: i32,
     pub verify_id: u32,
     
-    pub protect: bool,  // Whether protecte access is available.
+    pub protect: bool,  // Whether protected access is available.
     pub active_script: Option<Box<ScriptState>>,
     
     // TODO - Active Script
 
 }
-
 impl Player {
     pub fn new(coord: CoordGrid, gender: u8, window_status: WindowStatus, staff_mod_level: i32, pid: usize) -> Player {
         Player {
@@ -140,6 +144,14 @@ impl Player {
             active_script: None,
         }
     }
+
+    pub fn get_entity(&self) -> &Entity {
+        &self.pathing_entity.entity
+    }
+
+    pub fn as_entity_type(self) -> EntityType {
+        EntityType::Player(self)
+    }
     
     pub(crate) fn get_coord(&self) -> CoordGrid {
         self.pathing_entity.coord()
@@ -193,7 +205,7 @@ impl Player {
         self.pathing_entity.delayed
     }
     
-    pub fn run_script(&mut self, mut script: ScriptState, protected: Option<bool>, force: Option<bool>) -> Result<ScriptState, Box<dyn Error>>{
+    pub fn run_script(&mut self, mut script: ScriptState, protected: Option<bool>, force: Option<bool>) -> Result<i32, Box<dyn Error>>{
         let protect = protected.unwrap_or(false);
         let force = force.unwrap_or(false);
         
@@ -209,7 +221,7 @@ impl Player {
             self.protect = true;
         }
         
-        //let state = ScriptRunner::execute(script);
+        let state = ScriptRunner::execute(&mut script, false, false);
         
         if protect {
             self.protect = false;
@@ -229,25 +241,41 @@ impl Player {
             }
         }
 
-        Ok(script)
-        
-        //ScriptState::new(script, None)
+        Ok(state)
     }
     
-    pub fn execute_script(mut self, script: ScriptState, protected: Option<bool>, force: Option<bool>) {
-        debug!("Executing script: {}", script.script.name());
+    pub fn execute_script(&mut self, script: ScriptState, protected: Option<bool>, force: Option<bool>) {
+        //debug!("Executing script: {}", script.script.name());
         
-        let protected = protected.unwrap_or(false);
+        let protect = protected.unwrap_or(false);
         let force = force.unwrap_or(false);
 
-        let state = match self.run_script(script, Some(protected), Some(force)) {
+        let mut script_clone = script.clone();
+
+        let state = match self.run_script(script, Some(protect), Some(force)) {
             Ok(state) => state,
             Err(err) => {
                 debug!("Script execution failed: {}", err);
                 return;
             }
         };
-        
-        //if state != ScriptState::FINISHED && state != ScriptState::ABORTED {}
+
+        if state != ScriptState::FINISHED && state != ScriptState::ABORTED {
+            if state == ScriptState::WORLD_SUSPENDED {
+                // TODO - Engine.enqueueScript
+            } else if state == ScriptState::NPC_SUSPENDED {
+
+            } else {
+                if let Some(mut player) = script_clone.active_player.take() {
+                    let boxed_script = Box::new(script_clone.clone());
+                    player.active_script = Some(boxed_script);
+                    player.protect = protect;
+                    script_clone.active_player = Some(player);
+                }
+            }
+        } else if self.active_script.as_ref().map_or(false, |active_script| &script_clone == active_script.as_ref()) {
+            self.active_script = None;
+            // TODO - close modal crap goes here
+        }
     }
 }

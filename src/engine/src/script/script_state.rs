@@ -1,11 +1,14 @@
-use crate::entity::entity::Entity;
 use crate::entity::entity_queue_request::ScriptArgument;
+use crate::entity::entity_type::EntityType;
+use crate::entity::loc::Loc;
+use crate::entity::npc::NPC;
+use crate::entity::obj::Obj;
 use crate::entity::player::Player;
 use crate::script::script_file::ScriptFile;
 use crate::script::script_pointer::ScriptPointer;
 use crate::script::server_trigger_types::ServerTriggerTypes;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct GosubStackFrame {
     pub script: ScriptFile,
     pub pc: i32,
@@ -14,12 +17,13 @@ pub struct GosubStackFrame {
 }
 
 // For debugger stack traces
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct JumpStackFrame {
     pub script: ScriptFile,
     pub pc: i32,
 }
 
+#[derive(Clone, PartialEq)]
 pub struct ScriptState {
     pub script: ScriptFile,
     pub trigger: ServerTriggerTypes,
@@ -38,22 +42,25 @@ pub struct ScriptState {
     pub int_locals: Vec<i32>,
     pub string_locals: Vec<String>,
 
-    // Necessary in our implementation?
+    // TODO - Necessary in our implementation?
     pointers: i32,
 
-    pub self_entity: Option<Entity>,
+    pub self_entity: Option<EntityType>,
 
     // Active entities
     pub active_player: Option<Player>,
     pub active_player2: Option<Player>,
-    // TODO - LOC & NPC
+    pub active_npc: Option<NPC>,
+    pub active_npc2: Option<NPC>,
+    pub active_loc: Option<Loc>,
+    pub active_loc2: Option<Loc>,
+    pub active_obj: Option<Obj>,
+    pub active_obj2: Option<Obj>,
 
     // String splitting
     pub split_pages: Vec<Vec<String>>,
     pub split_mesanim: i32
 }
-
-struct ScriptTriggerTypes(i32);
 
 impl ScriptState {
     pub const ABORTED: i32 = -1;
@@ -63,7 +70,7 @@ impl ScriptState {
     pub const PAUSEBUTTON: i32 = 3;
     pub const COUNTDIALOG: i32 = 4;
     pub const NPC_SUSPENDED: i32 = 5; // Suspended, move to NPC
-    pub const LOC_SUSPENDED: i32 = 6; // Suspended, move to world
+    pub const WORLD_SUSPENDED: i32 = 6; // Suspended, move to world
 
     pub fn new(script: ScriptFile, args: Option<Vec<ScriptArgument>>) -> Self {
         let mut int_locals = Vec::new();
@@ -101,6 +108,12 @@ impl ScriptState {
             self_entity: None,
             active_player: None,
             active_player2: None,
+            active_npc: None,
+            active_npc2: None,
+            active_loc: None,
+            active_loc2: None,
+            active_obj: None,
+            active_obj2: None,
             split_pages: Vec::new(),
             split_mesanim: -1,
         }
@@ -161,7 +174,7 @@ impl ScriptState {
         
         match player {
             Some(player) => Ok(player),
-            None => Err(format!("Player not found")),
+            None => Err("Player not found".to_string()),
         }
     }
     

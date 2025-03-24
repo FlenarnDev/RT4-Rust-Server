@@ -1,7 +1,8 @@
-use crate::entity::entity::{Entity, NonPathingEntity};
 use crate::entity::entity_lifecycle::EntityLifeCycle;
+use crate::entity::non_pathing_entity::NonPathingEntity;
 use crate::grid::coord_grid::CoordGrid;
 
+#[derive(Clone, PartialEq)]
 pub struct Loc {
     pub entity: NonPathingEntity,
     pub info: u32,

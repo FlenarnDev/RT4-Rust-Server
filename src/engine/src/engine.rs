@@ -135,11 +135,6 @@ impl Engine {
                                         if game_client.state == ConnectionState::New && game_client.is_connection_active() {
                                             Self::on_new_connection(&mut game_client, thread_player.clone());
                                         } else {
-                                            if game_client.state != ConnectionState::New {
-                                                debug!("Client now at connection state: {:?}, breaking initial loop", game_client.state);
-                                            } else {
-                                                debug!("Client closed connection, terminating.");
-                                            }
                                             break
                                         }
                                     }

@@ -42,7 +42,7 @@ pub enum ScriptOpcode {
     POP_ARRAY_INT = 46,
 
     // Server ops (1000-1999)
-    COORDX = 1000,
+    COORDX = 10000,
     COORDY = 1001,
     COORDZ = 1002,
     DISTANCE = 1003,
@@ -145,5 +145,5 @@ pub enum ScriptOpcode {
     LAST_USEITEM = 2063,
     LAST_USESLOT = 2064,
     LONGQUEUE = 2065,
-    MES = 2066,
+    MES = 1000,
 }

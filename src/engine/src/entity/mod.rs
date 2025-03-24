@@ -22,3 +22,6 @@ pub mod entity_list;
 pub mod window_status;
 mod npc_event_request;
 pub mod entity_queue_request;
+mod non_pathing_entity;
+mod pathing_entity;
+pub mod entity_type;

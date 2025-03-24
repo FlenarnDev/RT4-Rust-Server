@@ -16,6 +16,7 @@ use crate::io::client::protocol::client_protocol_repository::{get_decoder, get_h
 use crate::io::server::model::if_opensub::If_OpenSub;
 use crate::io::server::model::if_opentop::If_OpenTop;
 use crate::script::script_provider::ScriptProvider;
+use crate::script::script_runner::ScriptRunner;
 use crate::script::server_trigger_types::ServerTriggerTypes;
 
 pub struct NetworkPlayer {
@@ -217,7 +218,9 @@ impl NetworkPlayer {
         
         let login_trigger = ScriptProvider::get_by_trigger_specific(ServerTriggerTypes::LOGIN, -1, -1);
         if let Some(trigger) = login_trigger {
-            
+            self.player.execute_script(ScriptRunner::init(trigger, Some(self.player.clone().as_entity_type()), None, None), Some(true), None)
+        } else {
+            debug!("Login triggered but not found");
         }
         
         // TODO - last step

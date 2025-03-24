@@ -1,7 +1,9 @@
 use crate::engine::Engine;
 use crate::entity::entity_lifecycle::EntityLifeCycle;
 use crate::entity::network_player::NetworkPlayer;
+use crate::entity::non_pathing_entity::NonPathingEntity;
 use crate::entity::npc::NPC;
+use crate::entity::pathing_entity::PathingEntity;
 use crate::entity::player::Player;
 use crate::grid::coord_grid::CoordGrid;
 
@@ -139,36 +141,6 @@ macro_rules! impl_entity_behavior_for {
             }
         }
     };
-}
-
-#[derive(Copy, Clone)]
-pub struct PathingEntity {
-    entity: Entity,
-    pub(crate) delayed: bool,
-    pub(crate) delayed_until: i32,
-}
-
-impl PathingEntity {
-    pub fn new(coord: CoordGrid, width: u8, length: u8, lifecycle: EntityLifeCycle) -> Self {
-        PathingEntity {
-            entity: Entity::new(coord, width, length, lifecycle),
-            delayed: false,
-            delayed_until: -1,
-        }
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct NonPathingEntity {
-    entity: Entity,
-}
-
-impl NonPathingEntity {
-    pub fn new(coord: CoordGrid, width: u8, length: u8, lifecycle: EntityLifeCycle) -> Self {
-        NonPathingEntity {
-            entity: Entity::new(coord, width, length, lifecycle),
-        }
-    }
 }
 
 impl_entity_behavior_for!(PathingEntity, field: entity);

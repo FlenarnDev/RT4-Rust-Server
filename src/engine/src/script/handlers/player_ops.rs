@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use lazy_static::lazy_static;
+use std::sync::Once;
 use log::debug;
 use crate::script::script_opcode::ScriptOpcode;
 use crate::script::script_pointer::{checked_handler, ACTIVE_PLAYER};
@@ -7,13 +7,13 @@ use crate::script::script_runner::CommandHandlers;
 
 pub fn get_player_ops() -> &'static CommandHandlers {
     static mut HANDLERS: Option<CommandHandlers> = None;
-    static INIT: std::sync::Once = std::sync::Once::new();
+    static INIT: Once = Once::new();
 
     unsafe {
         INIT.call_once(|| {
             let mut handlers = HashMap::new();
 
-            handlers.insert(ScriptOpcode::MES as u32, checked_handler(
+            handlers.insert(ScriptOpcode::MES as i32, checked_handler(
                 ACTIVE_PLAYER,
                 |state| {
                     let message = state.pop_string();

@@ -2,11 +2,10 @@ use std::collections::HashMap;
 use std::path::Path;
 use log::{debug, error};
 use log::Level::Debug;
-use sha2::digest::typenum::op;
 use crate::io::packet::Packet;
 use crate::script::script_opcode::ScriptOpcode;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ScriptInfo {
     pub(crate) script_name: String,
     source_file_path: String,
@@ -33,7 +32,7 @@ pub fn is_large_operand(opcode: i32) -> bool {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ScriptFile {
     pub info: ScriptInfo,
     pub id: i32,

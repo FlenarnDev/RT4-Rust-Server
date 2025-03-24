@@ -1,6 +1,6 @@
 use constants::window_mode::window_mode;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct WindowStatus {
     pub window_mode: window_mode,
     pub canvas_width: u32,

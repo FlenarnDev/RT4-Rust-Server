@@ -1,5 +1,5 @@
 #[repr(u8)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum MoveStrategy {
     Smart = 0,
     Naive = 1,

@@ -2,6 +2,7 @@ use crate::entity::entity::Entity;
 use crate::entity::entity_lifecycle::EntityLifeCycle;
 use crate::grid::coord_grid::CoordGrid;
 
+#[derive(Clone, PartialEq)]
 pub struct Obj {
     pub entity: Entity,
     pub id: u16,

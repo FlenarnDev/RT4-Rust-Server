@@ -112,7 +112,7 @@ impl ScriptProvider {
         Self::ensure_initialized();
         let lookup = SCRIPT_LOOKUP.get()?;
         
-        if trigger as i32 != -1 {
+        if type_id != -1 {
             let key: usize = (trigger as u32 | (0x2 << 8) | ((type_id as u32) << 10)) as usize;
             return lookup.get(&key ).cloned();
         } else if category != -1 {

@@ -1,10 +1,13 @@
 use crate::entity::block_walk::BlockWalk;
-use crate::entity::entity::{Entity, PathingEntity};
+use crate::entity::entity::Entity;
 use crate::entity::entity_lifecycle::EntityLifeCycle;
+use crate::entity::entity_type::EntityType;
 use crate::entity::move_restrict::MoveRestrict;
 use crate::entity::move_strategy::MoveStrategy;
+use crate::entity::pathing_entity::PathingEntity;
 use crate::grid::coord_grid::CoordGrid;
 
+#[derive(Clone, PartialEq)]
 pub struct NPC {
     pub pathing_entity: PathingEntity,
     pub move_restrict: MoveRestrict,
@@ -29,5 +32,13 @@ impl NPC {
             nid,
             id,
         }
+    }
+    
+    pub fn get_entity(&self) -> &Entity {
+        &self.pathing_entity.entity
+    }
+    
+    pub fn into_entity_type(self) -> EntityType {
+        EntityType::NPC(self)
     }
 }

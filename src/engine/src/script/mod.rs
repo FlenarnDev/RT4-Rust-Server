@@ -6,4 +6,4 @@ pub mod server_trigger_types;
 mod handlers;
 pub mod script_state;
 pub mod script_pointer;
-mod script_runner;
+pub mod script_runner;
