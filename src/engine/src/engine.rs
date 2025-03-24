@@ -1,5 +1,4 @@
 use std::net::{IpAddr, TcpListener};
-use std::ptr::null_mut;
 use std::sync::{Arc, Mutex, Once};
 use std::thread;
 use std::thread::sleep;
@@ -16,7 +15,6 @@ use crate::engine_stat::EngineStat;
 use crate::entity::entity::EntityBehavior;
 use crate::entity::entity_list::{NPCList, NetworkPlayerList};
 use crate::entity::network_player::NetworkPlayer;
-use crate::entity::npc::NPC;
 use crate::entity::player::Player;
 use crate::entity::window_status::WindowStatus;
 use crate::game_connection::GameClient;
@@ -29,7 +27,7 @@ use crate::util::symbols::generate_server_symbols;
 
 pub struct Engine {
     pub members: bool,
-    pub current_tick: i32, // Current tick of the game world
+    pub current_tick: i32,
     pub tick_rate: Duration, // TODO - make variable to support increased rate during shutdown.
     // TODO - cache?
     // TODO - ops?
@@ -65,7 +63,7 @@ impl Engine {
             }
         })
     }
-    
+
     pub fn get() -> &'static mut Engine {
         unsafe {
             match &mut ENGINE {
@@ -80,13 +78,11 @@ impl Engine {
     }
 
     pub fn current_tick() -> i32 {
-        let tick = Self::get().current_tick;
-        debug!("current_tick() returning: {}", tick);
-        tick
+        Self::get().current_tick
     }
-    
+
     pub fn new() -> Engine {
-        Engine { 
+        Engine {
             members: false,
             current_tick: 0,
             tick_rate: Duration::from_millis(600),
@@ -97,9 +93,7 @@ impl Engine {
             new_players: Default::default(),
         }
     }
-    
-    // TODO - mock function?
-    
+
     pub fn start(&mut self, start_cycle: bool) {
         if let Err(e) = update_compiler() {
             error!("Failed to update compiler: {}", e);
@@ -122,7 +116,6 @@ impl Engine {
 
         ScriptProvider::load();
 
-
         info!("Starting server on port 40001");
         let listen_addr = "127.0.0.1:40001";
         let thread_new_players = Arc::clone(&self.new_players);
@@ -133,7 +126,6 @@ impl Engine {
                     for stream in listener.incoming() {
                         match stream {
                             Ok(stream) => {
-
                                 let thread_player = Arc::clone(&thread_new_players);
 
                                 thread::spawn(move || {
@@ -141,7 +133,7 @@ impl Engine {
 
                                     loop {
                                         if game_client.state == ConnectionState::New && game_client.is_connection_active() {
-                                            Self::on_new_connection(&mut game_client, Arc::clone(&thread_player));
+                                            Self::on_new_connection(&mut game_client, thread_player.clone());
                                         } else {
                                             if game_client.state != ConnectionState::New {
                                                 debug!("Client now at connection state: {:?}, breaking initial loop", game_client.state);
@@ -164,7 +156,7 @@ impl Engine {
                 }
             }
         });
-        
+
         // TODO - load map
         info!("World ready!");
         if start_cycle {
@@ -248,12 +240,12 @@ impl Engine {
             network_player.player.playtime += 1;
 
             if network_player.is_client_connected() && network_player.decode_in(self.current_tick) {
-                
+
             }
         });
-        
+
         // TODO - client input tracking
-        
+
         // TODO - process pathfinding/following
         self.cycle_stats[EngineStat::ClientsIn as usize] = start.elapsed();
     }
@@ -294,7 +286,7 @@ impl Engine {
     /// Close interface if attempting to logout
     fn process_players(&mut self) {
         let start: Instant = Instant::now();
-        
+
         self.cycle_stats[EngineStat::Players as usize] = start.elapsed();
     }
     
@@ -328,14 +320,14 @@ impl Engine {
             if (network_player.player.logging_out) && (force || self.current_tick >= network_player.player.prevent_logout_until) {
                 pids_to_remove.push(network_player.player.get_pid());
             }
-        }) ;
-        
+        });
+
         // TODO
-        
+
         for pid in pids_to_remove {
             self.remove_player(pid)
         }
-        
+
         self.cycle_stats[EngineStat::Logouts as usize] = start.elapsed();
     }
     
@@ -349,29 +341,30 @@ impl Engine {
             let mut shared_players = self.new_players.lock().unwrap();
             shared_players.drain(..).collect::<Vec<NetworkPlayer>>()
         };
-        
+
         for mut network_player in player_to_add {
             // Prevent logging in if a player save is being flushed
             // TODO
-            
+
             // Reconnect a new socket with player in the world
             // TODO
-            
+
             // Player already logged in
             //for (_, other_player) in &self.players {
-                // TODO
+            // TODO
             //}
-            
+
             // Prevent logging in when the server is shutting down.
             // TODO
-            
-            match self.get_next_pid(Some(&network_player.client)) { 
-                Ok(pid) =>  {
+
+            match self.get_next_pid(Some(&network_player.client)) {
+                Ok(pid) => {
                     network_player.client.write_packet().expect("Failed to write packet to new connection");
                     network_player.player.set_pid(pid);
                     self.players.set(pid, network_player).expect("Failed to set player!");
-                    if let Some(mut player_ref) = self.players.get_mut(pid) {
-                        player_ref.on_login()
+
+                    if let Some(player_ref) = self.players.get_mut(pid) {
+                        player_ref.on_login();
                     }
                 },
                 Err(_err) => {
@@ -382,7 +375,7 @@ impl Engine {
                 }
             };
         }
-        self.new_players.lock().unwrap().clear();
+
         self.cycle_stats[EngineStat::Logins as usize] = start.elapsed();
     }
     
@@ -393,7 +386,6 @@ impl Engine {
     /// Compute shared buffer
     fn process_zones(&mut self) {
         let start: Instant = Instant::now();
-        let tick: u32 = self.current_tick as u32;
         // TODO
         self.cycle_stats[EngineStat::Zones as usize] = start.elapsed();
     }
@@ -451,8 +443,6 @@ impl Engine {
     fn process_cleanup(&mut self) {
         let start: Instant = Instant::now();
         
-        let tick = self.current_tick;
-        
         // Reset zones
         // TODO
         
@@ -467,14 +457,13 @@ impl Engine {
         // TODO
         self.cycle_stats[EngineStat::Cleanup as usize] = start.elapsed();
     }
-    
-    pub fn remove_player(&mut self, pid: usize) {
-        if let Some(mut network_player) = self.players.get_mut(pid) {
-            if network_player.is_client_connected() {
-                network_player.client.shutdown();
-            }
 
-            network_player.player.set_active(false);
+    pub fn remove_player(&mut self, pid: usize) {
+        if let Some(player_ref) = self.players.get_mut(pid) {
+            if player_ref.is_client_connected() {
+                player_ref.client.shutdown();
+            }
+            player_ref.player.set_active(false);
         }
         self.players.remove(pid);
     }
@@ -486,9 +475,7 @@ impl Engine {
             return
         }
 
-
         client.opcode = client.inbound().g1();
-
         if client.opcode == title_protocol::INIT_GAME_CONNECTION {
             client.read_packet_with_size(1).unwrap();
 
@@ -498,7 +485,6 @@ impl Engine {
 
             // Server session key for this connection, used in decrypting return values.
             let session_key: u64 = ((rand::random::<f64>() * 99999999.0) as u64) << 32 | ((rand::random::<f64>() * 99999999.0) as u64);
-            debug!("Session key: {}", session_key);
             client.outbound.p8(session_key as i64);
             client.write_packet().expect("Failed to write packet to new connection");
         }  else if client.opcode == title_protocol::RECONNECT || client.opcode == title_protocol::LOGIN {
@@ -518,8 +504,8 @@ impl Engine {
             // Data here is unknown. 
             // Populated through client script opcode [5600]. 
             let bytes1 = client.inbound().g1b();
-            
-            
+
+
             let adverts_suppressed = client.inbound().g1b();
             let client_signed = client.inbound().g1b();
             
@@ -567,7 +553,6 @@ impl Engine {
             );
             
             let username_37 = rsa_packet_decrypted.g8();
-
             let password = rsa_packet_decrypted.gjstr(0);
 
             if client.opcode == title_protocol::RECONNECT {
@@ -620,24 +605,14 @@ impl Engine {
         match peer_addr.ip() {
             IpAddr::V4(ipv4) => {
                 let last_octet = ipv4.octets()[3];
-                let start = (last_octet % 20) as usize * 100;
-                self.players.next(true, Some(start)).map(|id| id)
+                let start = ((last_octet % 20) * 100) as usize;
+                self.players.next(true, Some(start))
             },
             IpAddr::V6(ipv6) => {
-                let ip_string = ipv6.to_string();
-                let third_segment = ip_string.split(':').nth(2);
-
-                if let Some(segment) = third_segment {
-                    if segment.is_empty() {
-                        return default();
-                    }
-
-                    let segment_value = i32::from_str_radix(segment, 16).unwrap_or(0);
-                    let start = (segment_value % 20) as usize * 100;
-                    self.players.next(true, Some(start)).map(|id| id)
-                } else {
-                    default()
-                }
+                let segments = ipv6.segments();
+                let third_segment = segments[2];
+                let start = ((third_segment % 20) * 100) as usize;
+                self.players.next(true, Some(start))
             }
         }
     }

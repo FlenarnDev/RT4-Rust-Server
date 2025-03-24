@@ -1,35 +1,44 @@
-use std::cell::{Ref, RefCell, RefMut};
-use std::collections::HashSet;
-use std::marker::PhantomData;
-use std::rc::Rc;
+use std::collections::VecDeque;
 use crate::entity::entity::EntityBehavior;
 use crate::entity::network_player::NetworkPlayer;
 use crate::entity::npc::NPC;
 
 pub struct EntityList<T: EntityBehavior> {
-    entities: Vec<Option<Rc<RefCell<T>>>>,
-    ids: Vec<i32>,
-    free: HashSet<usize>,
+    // Direct storage - no more Rc<RefCell<T>>
+    entities: Vec<Option<T>>,
+    // Keeps track of which indices are used
+    id_to_index: Vec<usize>,
+    // Efficient queue of free slots
+    free_indices: VecDeque<usize>,
+    // Original padding requirement
     index_padding: usize,
+    // Track last used index for optimization
     last_used_index: usize,
-    phantom: PhantomData<T>,
 }
 
 impl<T: EntityBehavior> EntityList<T> {
     pub fn new(size: usize, index_padding: usize) -> Self {
-        // Initialize the free set with all available indices
-        let free = (0..size).collect();
+        // Initialize id_to_index with invalid value
+        let mut id_to_index = vec![usize::MAX; size];
 
-        // Create a Vec with None values
-        let entities = vec![None; size];
+        // Initialize entities without requiring Clone
+        let mut entities = Vec::with_capacity(size);
+        for _ in 0..size {
+            entities.push(None);
+        }
+
+        // Initialize free indices (in reverse for LIFO behavior)
+        let mut free_indices = VecDeque::with_capacity(size);
+        for i in (0..size).rev() {
+            free_indices.push_back(i);
+        }
 
         EntityList {
             entities,
-            ids: vec![-1; size],
-            free,
+            id_to_index,
+            free_indices,
             index_padding,
             last_used_index: 0,
-            phantom: PhantomData,
         }
     }
 
@@ -37,13 +46,13 @@ impl<T: EntityBehavior> EntityList<T> {
         let start = start.unwrap_or(self.last_used_index + 1);
 
         // First try searching from start to the end
-        if let Some(index) = (start..self.ids.len()).find(|&index| self.ids[index] == -1) {
+        if let Some(index) = (start..self.id_to_index.len()).find(|&index| self.id_to_index[index] == usize::MAX) {
             return Ok(index);
         }
 
         // If not found, search from index_padding to start
-        let end = start.min(self.ids.len());
-        if let Some(index) = (self.index_padding..end).find(|&index| self.ids[index] == -1) {
+        let end = start.min(self.id_to_index.len());
+        if let Some(index) = (self.index_padding..end).find(|&index| self.id_to_index[index] == usize::MAX) {
             return Ok(index);
         }
 
@@ -51,199 +60,253 @@ impl<T: EntityBehavior> EntityList<T> {
     }
 
     pub fn count(&self) -> usize {
-        self.entities.len() - self.free.len()
+        self.entities.len() - self.free_indices.len()
     }
 
     // Get a reference to an entity
-    pub fn get(&self, id: usize) -> Option<Ref<T>> {
-        if id >= self.ids.len() {
+    pub fn get(&self, id: usize) -> Option<&T> {
+        if id >= self.id_to_index.len() {
             return None;
         }
 
-        let index = self.ids[id];
-        if index == -1 {
+        let index = self.id_to_index[id];
+        if index == usize::MAX {
             None
         } else {
-            // Convert the Rc<RefCell<T>> to a Ref<T>
-            self.entities[index as usize].as_ref().map(|rc| rc.borrow())
+            self.entities[index].as_ref()
         }
     }
 
     // Get a mutable reference to an entity
-    pub fn get_mut(&self, id: usize) -> Option<RefMut<T>> {
-        if id >= self.ids.len() {
+    pub fn get_mut(&mut self, id: usize) -> Option<&mut T> {
+        if id >= self.id_to_index.len() {
             return None;
         }
 
-        let index = self.ids[id];
-        if index == -1 {
+        let index = self.id_to_index[id];
+        if index == usize::MAX {
             None
         } else {
-            // Convert the Rc<RefCell<T>> to a RefMut<T>
-            self.entities[index as usize].as_ref().map(|rc| rc.borrow_mut())
+            self.entities[index].as_mut()
         }
     }
 
     pub fn set(&mut self, id: usize, entity: T) -> Result<(), &'static str> {
         // Make sure ID is within bounds
-        if id >= self.ids.len() {
+        if id >= self.id_to_index.len() {
             return Err("ID out of bounds");
         }
 
-        // Check if we have any free slots
-        let index = match self.free.iter().next().copied() {
+        // Check if this ID is already in use
+        if self.id_to_index[id] != usize::MAX {
+            return Err("ID already in use");
+        }
+
+        // Get the next available index
+        let index = match self.free_indices.pop_front() {
             Some(index) => index,
             None => return Err("Cannot find available entities slot"),
         };
 
-        // Remove the chosen index from free set
-        self.free.remove(&index);
-
-        // Set the id mapping and entity
-        self.ids[id] = index as i32;
-        self.entities[index] = Some(Rc::new(RefCell::new(entity)));
+        // Set the entity and update mappings
+        self.entities[index] = Some(entity);
+        self.id_to_index[id] = index;
         self.last_used_index = id;
 
         Ok(())
     }
 
     pub fn remove(&mut self, id: usize) {
-        if id < self.ids.len() {
-            let index = self.ids[id];
-            if index != -1 {
-                self.ids[id] = -1;
-                self.free.insert(index as usize);
-                self.entities[index as usize] = None;
+        if id < self.id_to_index.len() {
+            let index = self.id_to_index[id];
+            if index != usize::MAX {
+                self.id_to_index[id] = usize::MAX;
+                self.entities[index] = None;
+                self.free_indices.push_back(index);
             }
         }
     }
 
     pub fn reset(&mut self) {
-        // Clear all entities and IDs
-        self.entities.fill(None);
-        self.ids.fill(-1);
+        // Clear all entities
+        for entity in &mut self.entities {
+            *entity = None;
+        }
 
-        // Reset the free set
-        self.free.clear();
-        self.free.extend(0..self.entities.len());
+        // Reset ID to index mappings
+        for id in &mut self.id_to_index {
+            *id = usize::MAX;
+        }
+
+        // Reset free indices
+        self.free_indices.clear();
+        for i in (0..self.entities.len()).rev() {
+            self.free_indices.push_back(i);
+        }
 
         self.last_used_index = 0;
     }
 
     // Iterator implementation
-    pub fn iter(&self) -> EntityIterator<T> {
-        EntityIterator {
-            entity_list: self,
-            current_index: 0,
-        }
+    pub fn iter(&self) -> impl Iterator<Item = (usize, &T)> {
+        (0..self.id_to_index.len())
+            .filter_map(move |id| {
+                let idx = self.id_to_index[id];
+                if idx != usize::MAX {
+                    if let Some(entity) = &self.entities[idx] {
+                        return Some((id, entity));
+                    }
+                }
+                None
+            })
     }
 
     pub fn for_each<F>(&self, mut f: F)
     where
         F: FnMut(&T),
     {
-        for id in 0..self.ids.len() {
-            if self.ids[id] != -1 {
-                if let Some(entity) = &self.entities[self.ids[id] as usize] {
-                    f(&entity.borrow());
+        for id in 0..self.id_to_index.len() {
+            let index = self.id_to_index[id];
+            if index != usize::MAX {
+                if let Some(entity) = &self.entities[index] {
+                    f(entity);
                 }
             }
         }
     }
 
-    // This method applies a mutable function to each entity
-    pub fn for_each_mut<F>(&self, mut f: F)
+    pub fn for_each_mut<F>(&mut self, mut f: F)
     where
         F: FnMut(&mut T),
     {
-        for id in 0..self.ids.len() {
-            if self.ids[id] != -1 {
-                if let Some(entity) = &self.entities[self.ids[id] as usize] {
-                    f(&mut entity.borrow_mut());
+        for id in 0..self.id_to_index.len() {
+            let index = self.id_to_index[id];
+            if index != usize::MAX {
+                if let Some(entity) = &mut self.entities[index] {
+                    f(entity);
                 }
             }
         }
     }
 }
 
-pub struct EntityIterator<'a, T: EntityBehavior> {
-    entity_list: &'a EntityList<T>,
-    current_index: usize,
-}
-
-impl<'a, T: EntityBehavior> Iterator for EntityIterator<'a, T> {
-    type Item = Ref<'a, T>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while self.current_index < self.entity_list.ids.len() {
-            let id = self.entity_list.ids[self.current_index];
-            self.current_index += 1;
-
-            if id != -1 {
-                if let Some(rc) = &self.entity_list.entities[id as usize] {
-                    return Some(rc.borrow());
-                }
-            }
-        }
-        None
-    }
-}
+// This implementation has been completely redesigned to work without Rc<RefCell>
+// The challenge is that the Engine code expects the behavior of Rc<RefCell>
+// We'll need to update NetworkPlayerList and NPCList to adapt to this change
 
 pub struct NetworkPlayerList {
-    inner: EntityList<NetworkPlayer>,
+    list: EntityList<NetworkPlayer>,
 }
 
 impl NetworkPlayerList {
     pub fn new(size: usize) -> Self {
         NetworkPlayerList {
-            inner: EntityList::new(size, 1),
+            list: EntityList::new(size, 1),
         }
     }
 
     pub fn next(&self, priority: bool, start: Option<usize>) -> Result<usize, &'static str> {
-        let start_index = start.unwrap_or(self.inner.last_used_index + 1);
+        let start_index = start.unwrap_or(self.list.last_used_index + 1);
 
         if priority {
-            // Start searching at 1 if the calculated start is 0
-            let init = if start_index == 0 { 1 } else { 0 };
-
-            // Use range and find pattern for better readability
-            if let Some(index) = (0..100)
-                .map(|i| start_index + i)
-                .take_while(|&index| index < self.inner.ids.len())
-                .find(|&index| self.inner.ids[index] == -1) {
-                return Ok(index);
+            // Try to find an ID near the start position
+            for offset in 0..100 {
+                let index = start_index + offset;
+                if index < self.list.id_to_index.len() && self.list.id_to_index[index] == usize::MAX {
+                    return Ok(index);
+                }
             }
         }
 
         // Fall back to the base implementation
-        self.inner.next(false, Some(start_index))
+        self.list.next(false, Some(start_index))
     }
 
-    // Delegate methods to inner
-    pub fn count(&self) -> usize { self.inner.count() }
-    pub fn get(&self, id: usize) -> Option<Ref<NetworkPlayer>> { self.inner.get(id) }
-    pub fn get_mut(&self, id: usize) -> Option<RefMut<NetworkPlayer>> { self.inner.get_mut(id) }
-    pub fn set(&mut self, id: usize, entity: NetworkPlayer) -> Result<(), &'static str> { self.inner.set(id, entity) }
-    pub fn remove(&mut self, id: usize) { self.inner.remove(id) }
-    pub fn reset(&mut self) { self.inner.reset() }
-    pub fn iter(&self) -> EntityIterator<NetworkPlayer> { self.inner.iter() }
+    pub fn count(&self) -> usize {
+        self.list.count()
+    }
 
-    pub fn for_each<F>(&self, f: F) where F: Fn(&NetworkPlayer) { self.inner.for_each(f) }
-    pub fn for_each_mut<F>(&self, f: F) where F: FnMut(&mut NetworkPlayer) { self.inner.for_each_mut(f) }
+    pub fn get(&self, id: usize) -> Option<&NetworkPlayer> {
+        self.list.get(id)
+    }
+
+    pub fn get_mut(&mut self, id: usize) -> Option<&mut NetworkPlayer> {
+        self.list.get_mut(id)
+    }
+
+    pub fn set(&mut self, id: usize, entity: NetworkPlayer) -> Result<(), &'static str> {
+        self.list.set(id, entity)
+    }
+
+    pub fn remove(&mut self, id: usize) {
+        self.list.remove(id)
+    }
+
+    pub fn reset(&mut self) {
+        self.list.reset()
+    }
+
+    pub fn for_each<F>(&self, mut f: F)
+    where
+        F: FnMut(&NetworkPlayer)
+    {
+        self.list.for_each(f)
+    }
+
+    pub fn for_each_mut<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&mut NetworkPlayer)
+    {
+        self.list.for_each_mut(f)
+    }
 }
 
 pub struct NPCList {
-    inner: EntityList<NPC>,
+    list: EntityList<NPC>,
 }
 
 impl NPCList {
     pub fn new(size: usize) -> Self {
         NPCList {
-            inner: EntityList::new(size, 1),
+            list: EntityList::new(size, 1),
         }
     }
 
-    pub fn for_each<F>(&self, f: F) where F: Fn(&NPC) { self.inner.for_each(f) }
-    pub fn for_each_mut<F>(&self, f: F) where F: FnMut(&mut NPC) { self.inner.for_each_mut(f) }
+    pub fn count(&self) -> usize {
+        self.list.count()
+    }
+
+    pub fn get(&self, id: usize) -> Option<&NPC> {
+        self.list.get(id)
+    }
+
+    pub fn get_mut(&mut self, id: usize) -> Option<&mut NPC> {
+        self.list.get_mut(id)
+    }
+
+    pub fn set(&mut self, id: usize, entity: NPC) -> Result<(), &'static str> {
+        self.list.set(id, entity)
+    }
+
+    pub fn remove(&mut self, id: usize) {
+        self.list.remove(id)
+    }
+
+    pub fn reset(&mut self) {
+        self.list.reset()
+    }
+
+    pub fn for_each<F>(&self, mut f: F)
+    where
+        F: FnMut(&NPC)
+    {
+        self.list.for_each(f)
+    }
+
+    pub fn for_each_mut<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&mut NPC)
+    {
+        self.list.for_each_mut(f)
+    }
 }
