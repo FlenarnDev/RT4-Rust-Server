@@ -19,6 +19,7 @@ use crate::script::script_provider::ScriptProvider;
 use crate::script::script_runner::ScriptRunner;
 use crate::script::server_trigger_types::ServerTriggerTypes;
 
+// TODO - ditch the concept of NetworkPlayer and merge into Player?
 pub struct NetworkPlayer {
     pub player: Player,
     pub client: GameClient,
@@ -219,8 +220,6 @@ impl NetworkPlayer {
         let login_trigger = ScriptProvider::get_by_trigger_specific(ServerTriggerTypes::LOGIN, -1, -1);
         if let Some(trigger) = login_trigger {
             self.player.execute_script(ScriptRunner::init(trigger, Some(self.player.clone().as_entity_type()), None, None), Some(true), None)
-        } else {
-            debug!("Login triggered but not found");
         }
         
         // TODO - last step

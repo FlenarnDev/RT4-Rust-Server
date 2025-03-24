@@ -245,8 +245,6 @@ impl Player {
     }
     
     pub fn execute_script(&mut self, script: ScriptState, protected: Option<bool>, force: Option<bool>) {
-        //debug!("Executing script: {}", script.script.name());
-        
         let protect = protected.unwrap_or(false);
         let force = force.unwrap_or(false);
 

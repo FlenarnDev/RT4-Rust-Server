@@ -27,3 +27,8 @@ num_enum = "0.7.3"
 name = "packet_bench"
 harness = false
 path = "./src/io/benches/packet_bench.rs"
+
+[features]
+default = ["profiling"]  # This makes profiling enabled by default
+profiling = []
+debug = ["profiling"]
