@@ -144,12 +144,16 @@ macro_rules! impl_entity_behavior_for {
 #[derive(Copy, Clone)]
 pub struct PathingEntity {
     entity: Entity,
+    pub(crate) delayed: bool,
+    pub(crate) delayed_until: i32,
 }
 
 impl PathingEntity {
     pub fn new(coord: CoordGrid, width: u8, length: u8, lifecycle: EntityLifeCycle) -> Self {
         PathingEntity {
             entity: Entity::new(coord, width, length, lifecycle),
+            delayed: false,
+            delayed_until: -1,
         }
     }
 }

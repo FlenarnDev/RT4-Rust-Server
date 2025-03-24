@@ -1,3 +1,4 @@
+use std::error::Error;
 use crate::entity::block_walk::BlockWalk;
 use crate::entity::entity::{EntityBehavior, PathingEntity};
 use crate::entity::entity_lifecycle::EntityLifeCycle;
@@ -6,6 +7,9 @@ use crate::entity::move_strategy::MoveStrategy;
 use crate::entity::window_status::WindowStatus;
 use crate::grid::coord_grid::CoordGrid;
 use constants::window_mode::window_mode;
+use log::debug;
+use crate::script::script_pointer::ScriptPointer;
+use crate::script::script_state::ScriptState;
 
 pub struct LevelExperience {
     experience_table: [i32; 99],
@@ -43,7 +47,7 @@ impl LevelExperience {
     }
 }
 
-#[derive(Copy, Clone)]
+
 pub struct Player {
     // Permanent
     pub pathing_entity: PathingEntity,
@@ -70,6 +74,10 @@ pub struct Player {
     pub last_response: i32,
     pub last_connected: i32,
     pub verify_id: u32,
+    
+    pub protect: bool,  // Whether protecte access is available.
+    pub active_script: Option<Box<ScriptState>>,
+    
     // TODO - Active Script
 
 }
@@ -99,6 +107,8 @@ impl Player {
             last_response: -1,
             last_connected: -1,
             verify_id: 0,
+            protect: false,
+            active_script: None,
         }
     }
     
@@ -126,10 +136,12 @@ impl Player {
             last_response: -1,
             last_connected: -1,
             verify_id: 0,
+            protect: false,
+            active_script: None,
         }
     }
     
-    pub(crate) fn get_coord(self) -> CoordGrid {
+    pub(crate) fn get_coord(&self) -> CoordGrid {
         self.pathing_entity.coord()
     }
 
@@ -137,7 +149,7 @@ impl Player {
         self.pathing_entity.set_coord(coord);
     }
 
-    pub(crate) fn get_origin_coord(self) -> CoordGrid {
+    pub(crate) fn get_origin_coord(&self) -> CoordGrid {
         self.origin_coord
     }
 
@@ -153,27 +165,89 @@ impl Player {
         self.pathing_entity.set_active(active);
     }
     
-    pub(crate) fn get_verify_id(self) -> u32 {
+    pub(crate) fn get_verify_id(&self) -> u32 {
         self.verify_id
     }
     
     pub(crate) fn get_incremented_verify_id(&mut self) -> u32 {
         self.verify_id = self.verify_id +1;
-        self.get_verify_id()
+        self.verify_id
     }
     pub(crate) fn set_verify_id(&mut self, verify_id: u32) {
         self.verify_id = verify_id;
     }
     
-    pub(crate) fn get_staff_mod_level(self) -> i32 {
+    pub(crate) fn get_staff_mod_level(&self) -> i32 {
         self.staff_mod_level
     }
     
-    pub(crate) fn get_pid(self) -> usize {
+    pub(crate) fn get_pid(&self) -> usize {
         self.pid
     }
     
     pub(crate)fn set_pid(&mut self, pid: usize) {
         self.pid = pid;
+    }
+    
+    pub fn delayed(&self) -> bool {
+        self.pathing_entity.delayed
+    }
+    
+    pub fn run_script(&mut self, mut script: ScriptState, protected: Option<bool>, force: Option<bool>) -> Result<ScriptState, Box<dyn Error>>{
+        let protect = protected.unwrap_or(false);
+        let force = force.unwrap_or(false);
+        
+        if !force && protect && (self.protect || self.delayed()) {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                format!("Cannot get protected access for script: {}", script.script.name())
+            )));
+        }
+        
+        if protect {
+            script.pointer_add(ScriptPointer::ProtectedActivePlayer);
+            self.protect = true;
+        }
+        
+        //let state = ScriptRunner::execute(script);
+        
+        if protect {
+            self.protect = false;
+        }
+        
+        if script.pointer_get(ScriptPointer::ProtectedActivePlayer) && script.active_player.is_some() {
+            script.pointer_remove(ScriptPointer::ProtectedActivePlayer);
+            if let Some(player) = script.active_player.as_mut() {
+                player.protect = false;
+            }
+        }
+        
+        if script.pointer_get(ScriptPointer::ProtectedActivePlayer2) && script.active_player2.is_some() {
+            script.pointer_remove(ScriptPointer::ProtectedActivePlayer2);
+            if let Some(player) = script.active_player2.as_mut() {
+                player.protect = false;
+            }
+        }
+
+        Ok(script)
+        
+        //ScriptState::new(script, None)
+    }
+    
+    pub fn execute_script(mut self, script: ScriptState, protected: Option<bool>, force: Option<bool>) {
+        debug!("Executing script: {}", script.script.name());
+        
+        let protected = protected.unwrap_or(false);
+        let force = force.unwrap_or(false);
+
+        let state = match self.run_script(script, Some(protected), Some(force)) {
+            Ok(state) => state,
+            Err(err) => {
+                debug!("Script execution failed: {}", err);
+                return;
+            }
+        };
+        
+        //if state != ScriptState::FINISHED && state != ScriptState::ABORTED {}
     }
 }

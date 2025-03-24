@@ -1,5 +1,7 @@
+use num_enum::TryFromPrimitive;
+
 #[repr(i32)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, TryFromPrimitive)]
 pub enum ServerTriggerTypes {
     PROC = 0,
     LABEL = 1,
