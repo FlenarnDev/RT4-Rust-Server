@@ -545,7 +545,7 @@ impl Engine {
             }
 
             // Sent on login, however it has no function in revision 530.
-            let xtea_key = XTEAKey(
+            let _xtea_key = XTEAKey(
                 rsa_packet_decrypted.g4() + 50,
                 rsa_packet_decrypted.g4() + 50,
                 rsa_packet_decrypted.g4() + 50, 

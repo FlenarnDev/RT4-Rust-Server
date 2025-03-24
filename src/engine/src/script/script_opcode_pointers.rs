@@ -70,6 +70,7 @@ pub fn initialize_script_opcode_pointers() -> HashMap<ScriptOpcode, ScriptOpcode
     let opcodes = vec![
         script_opcode!(ScriptOpcode::ALLOWDESIGN, { require: ["active_player"] }),
         script_opcode!(ScriptOpcode::ANIM, { require: ["active_player"], require2: ["active_player2"] }),
+        script_opcode!(ScriptOpcode::MES, { require: ["active_player"], require2: ["active_player2"] }),
     ];
     
     for (name, opcode) in opcodes {

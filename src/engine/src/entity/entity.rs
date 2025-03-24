@@ -1,3 +1,4 @@
+use crate::engine::Engine;
 use crate::entity::entity_lifecycle::EntityLifeCycle;
 use crate::entity::network_player::NetworkPlayer;
 use crate::entity::npc::NPC;
@@ -10,15 +11,15 @@ pub trait EntityBehavior {
     fn length(&self) -> u8;
     fn lifecycle(&self) -> EntityLifeCycle;
     fn active(&self) -> bool;
-    fn lifecycle_tick(&self) -> u32;
-    fn last_lifecycle_tick(&self) -> u32;
+    fn lifecycle_tick(&self) -> i32;
+    fn last_lifecycle_tick(&self) -> i32;
 
     fn set_coord(&mut self, coord: CoordGrid);
     fn set_active(&mut self, active: bool);
-    fn set_lifecycle_tick(&mut self, tick: u32);
-    fn set_last_lifecycle_tick(&mut self, tick: u32);
+    fn set_lifecycle_tick(&mut self, tick: i32);
+    fn set_last_lifecycle_tick(&mut self, tick: i32);
 
-    fn check_lifecycle(&self, tick: u32) -> bool {
+    fn check_lifecycle(&self, tick: i32) -> bool {
         match self.lifecycle() {
             EntityLifeCycle::FOREVER => true,
             EntityLifeCycle::RESPAWN => self.lifecycle_tick() < tick,
@@ -26,9 +27,9 @@ pub trait EntityBehavior {
         }
     }
 
-    fn set_lifecycle(&mut self, tick: u32) {
-        self.set_last_lifecycle_tick(self.lifecycle_tick());
+    fn set_lifecycle(&mut self, tick: i32) {
         self.set_lifecycle_tick(tick);
+        self.set_last_lifecycle_tick(Engine::current_tick());
     }
 }
 
@@ -40,8 +41,8 @@ pub struct Entity {
     pub lifecycle: EntityLifeCycle,
     pub active: bool,
 
-    pub lifecycle_tick: u32,
-    pub last_lifecycle_tick: u32,
+    pub lifecycle_tick: i32,
+    pub last_lifecycle_tick: i32,
 }
 
 impl Entity {
@@ -64,13 +65,13 @@ impl EntityBehavior for Entity {
     fn length(&self) -> u8 { self.length }
     fn lifecycle(&self) -> EntityLifeCycle { self.lifecycle }
     fn active(&self) -> bool { self.active }
-    fn lifecycle_tick(&self) -> u32 { self.lifecycle_tick }
-    fn last_lifecycle_tick(&self) -> u32 { self.last_lifecycle_tick }
+    fn lifecycle_tick(&self) -> i32 { self.lifecycle_tick }
+    fn last_lifecycle_tick(&self) -> i32 { self.last_lifecycle_tick }
 
     fn set_coord(&mut self, coord: CoordGrid) { self.coord = coord; }
     fn set_active(&mut self, active: bool) { self.active = active; }
-    fn set_lifecycle_tick(&mut self, tick: u32) { self.lifecycle_tick = tick; }
-    fn set_last_lifecycle_tick(&mut self, tick: u32) { self.last_lifecycle_tick = tick; }
+    fn set_lifecycle_tick(&mut self, tick: i32) { self.lifecycle_tick = tick; }
+    fn set_last_lifecycle_tick(&mut self, tick: i32) { self.last_lifecycle_tick = tick; }
 }
 
 macro_rules! impl_entity_behavior_for {
@@ -81,13 +82,13 @@ macro_rules! impl_entity_behavior_for {
             fn length(&self) -> u8 { self.$field.length }
             fn lifecycle(&self) -> EntityLifeCycle { self.$field.lifecycle }
             fn active(&self) -> bool { self.$field.active }
-            fn lifecycle_tick(&self) -> u32 { self.$field.lifecycle_tick }
-            fn last_lifecycle_tick(&self) -> u32 { self.$field.last_lifecycle_tick }
+            fn lifecycle_tick(&self) -> i32 { self.$field.lifecycle_tick }
+            fn last_lifecycle_tick(&self) -> i32 { self.$field.last_lifecycle_tick }
             
             fn set_coord(&mut self, coord: CoordGrid) { self.$field.coord = coord; }
             fn set_active(&mut self, active: bool) { self.$field.active = active; }
-            fn set_lifecycle_tick(&mut self, tick: u32) { self.$field.lifecycle_tick = tick; }
-            fn set_last_lifecycle_tick(&mut self, tick: u32) { self.$field.last_lifecycle_tick = tick; }
+            fn set_lifecycle_tick(&mut self, tick: i32) { self.$field.lifecycle_tick = tick; }
+            fn set_last_lifecycle_tick(&mut self, tick: i32) { self.$field.last_lifecycle_tick = tick; }
         }
     };
     
@@ -113,11 +114,11 @@ macro_rules! impl_entity_behavior_for {
                 self.$($field).+.active()
             }
             
-            fn lifecycle_tick(&self) -> u32 { 
+            fn lifecycle_tick(&self) -> i32 { 
                 self.$($field).+.lifecycle_tick()
             }
             
-            fn last_lifecycle_tick(&self) -> u32 { 
+            fn last_lifecycle_tick(&self) -> i32 { 
                 self.$($field).+.last_lifecycle_tick()
             }
             
@@ -129,11 +130,11 @@ macro_rules! impl_entity_behavior_for {
                 self.$($field).+.set_active(active);
             }
             
-            fn set_lifecycle_tick(&mut self, tick: u32) { 
+            fn set_lifecycle_tick(&mut self, tick: i32) { 
                 self.$($field).+.set_lifecycle_tick(tick);
             }
             
-            fn set_last_lifecycle_tick(&mut self, tick: u32) { 
+            fn set_last_lifecycle_tick(&mut self, tick: i32) { 
                 self.$($field).+.set_last_lifecycle_tick(tick);
             }
         }

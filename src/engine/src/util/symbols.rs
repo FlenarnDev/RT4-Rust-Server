@@ -22,8 +22,13 @@ pub fn generate_server_symbols() {
     for opcode in ScriptOpcode::iter() {
         let opcode_value = opcode as i32;
         let command_name = format!("{:?}", opcode).to_lowercase();
+
+        // format:
+        // opcode<tab>command<tab>require<tab>corrupt<tab>set<tab>conditional<tab>secondary<tab>secondaryRequire
         
         let mut line = format!("{}\t{}", opcode_value, command_name);
+        
+        // TODO: pointers
         
         line.push('\n');
         command_symbols.push_str(&line);

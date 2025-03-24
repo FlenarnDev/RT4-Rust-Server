@@ -20,3 +20,4 @@ mod npc_mode;
 pub mod network_player;
 pub mod entity_list;
 pub mod window_status;
+mod npc_event_request;
