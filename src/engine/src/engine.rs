@@ -11,7 +11,7 @@ use constants::login_out::login_out;
 use constants::title_protocol::title_protocol;
 use crate::io::client_state::ConnectionState;
 use crate::io::rsa::rsa;
-use crate::engine_stat::EngineStat;
+use crate::engine_stat::engine_stat;
 use crate::entity::entity::EntityBehavior;
 use crate::entity::entity_list::{NPCList, PlayerList};
 use crate::entity::player::Player;
@@ -175,23 +175,13 @@ impl Engine {
             self.process_cleanup();
             
             // Update stats
-            self.cycle_stats[EngineStat::Cycle as usize] = start.elapsed();
-            self.last_cycle_stats[EngineStat::Cycle as usize] = self.cycle_stats[EngineStat::Cycle as usize];
-            self.last_cycle_stats[EngineStat::World as usize] = self.cycle_stats[EngineStat::World as usize];
-            self.last_cycle_stats[EngineStat::ClientsIn as usize] = self.cycle_stats[EngineStat::ClientsIn as usize];
-            self.last_cycle_stats[EngineStat::Npcs as usize] = self.cycle_stats[EngineStat::Npcs as usize];
-            self.last_cycle_stats[EngineStat::Players as usize] = self.cycle_stats[EngineStat::Players as usize];
-            self.last_cycle_stats[EngineStat::Logouts as usize] = self.cycle_stats[EngineStat::Logouts as usize];
-            self.last_cycle_stats[EngineStat::Logins as usize] = self.cycle_stats[EngineStat::Logins as usize];
-            self.last_cycle_stats[EngineStat::Zones as usize] = self.cycle_stats[EngineStat::Zones as usize];
-            self.last_cycle_stats[EngineStat::ClientsOut as usize] = self.cycle_stats[EngineStat::ClientsOut as usize];
-            self.last_cycle_stats[EngineStat::Cleanup as usize] = self.cycle_stats[EngineStat::Cleanup as usize];
+            self.cycle_stats[engine_stat::CYCLE] = start.elapsed();
+            std::mem::swap(&mut self.cycle_stats, &mut self.last_cycle_stats);
             
             info!(
-                "Tick: {} took: {:?} with: {} player(s)",
+                "Tick: {} took: {:?}",
                 self.current_tick,
-                self.cycle_stats[EngineStat::Cycle as usize],
-                self.players.count()
+                self.cycle_stats[engine_stat::CYCLE]
             );
             
             // Cycle the world now
@@ -217,7 +207,7 @@ impl Engine {
                 // TODO
             }
         });
-        self.cycle_stats[EngineStat::World as usize] = start.elapsed();
+        self.cycle_stats[engine_stat::WORLD] = start.elapsed();
     }
 
     /// - Calculate AFK event readiness
@@ -241,7 +231,7 @@ impl Engine {
         // TODO - client input tracking
 
         // TODO - process pathfinding/following
-        self.cycle_stats[EngineStat::ClientsIn as usize] = start.elapsed();
+        self.cycle_stats[engine_stat::CLIENTS_IN] = start.elapsed();
     }
     
     /// Resume suspended script
@@ -258,7 +248,7 @@ impl Engine {
     fn process_npcs(&mut self) {
         let start: Instant = Instant::now();
         // TODO
-        self.cycle_stats[EngineStat::Npcs as usize] = start.elapsed();
+        self.cycle_stats[engine_stat::NPCS] = start.elapsed();
     }
     
     /// Resume suspended scripts
@@ -281,14 +271,14 @@ impl Engine {
     fn process_players(&mut self) {
         let start: Instant = Instant::now();
 
-        self.cycle_stats[EngineStat::Players as usize] = start.elapsed();
+        self.cycle_stats[engine_stat::PLAYERS] = start.elapsed();
     }
     
     /// Player logouts
     fn process_logouts(&mut self) {
         let start: Instant = Instant::now();
 
-        let mut pids_to_remove = Vec::new();
+        let mut pids_to_remove = Vec::with_capacity(16);
         self.players.for_each_mut(|player| {
             let mut force: bool = false;
 
@@ -322,7 +312,7 @@ impl Engine {
             self.remove_player(pid)
         }
 
-        self.cycle_stats[EngineStat::Logouts as usize] = start.elapsed();
+        self.cycle_stats[engine_stat::LOGOUTS] = start.elapsed();
     }
     
     /// Player logins
@@ -370,7 +360,7 @@ impl Engine {
             };
         }
 
-        self.cycle_stats[EngineStat::Logins as usize] = start.elapsed();
+        self.cycle_stats[engine_stat::LOGINS] = start.elapsed();
     }
     
     /// Build list of active zones around players
@@ -381,7 +371,7 @@ impl Engine {
     fn process_zones(&mut self) {
         let start: Instant = Instant::now();
         // TODO
-        self.cycle_stats[EngineStat::Zones as usize] = start.elapsed();
+        self.cycle_stats[engine_stat::ZONES] = start.elapsed();
     }
     
     /// Convert player movements
@@ -424,7 +414,7 @@ impl Engine {
             // TODO
             player.encode_out();
         });
-        self.cycle_stats[EngineStat::ClientsOut as usize] = start.elapsed();
+        self.cycle_stats[engine_stat::CLIENTS_OUT] = start.elapsed();
     }
     
     /// Reset zones
@@ -449,9 +439,10 @@ impl Engine {
         // TODO
         // Reset inventories
         // TODO
-        self.cycle_stats[EngineStat::Cleanup as usize] = start.elapsed();
+        self.cycle_stats[engine_stat::CLEANUP] = start.elapsed();
     }
 
+    #[inline]
     pub fn remove_player(&mut self, pid: usize) {
         if let Some(player_ref) = self.players.get_mut(pid) {
             if player_ref.is_client_connected() {

@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::path::Path;
 use log::{debug, error};
-use log::Level::Debug;
 use crate::io::packet::Packet;
 use crate::script::script_opcode::ScriptOpcode;
 
@@ -125,13 +124,12 @@ impl ScriptFile {
         script.int_arg_count = packet.g2() as i32;
         script.string_arg_count = packet.g2() as i32;
         
-        
         let switches = packet.g1();
         for _i in 0..switches {
             let count = packet.g2();
             let mut table: SwitchTable = SwitchTable::new();
             
-            for j in 0..count {
+            for _j in 0..count {
                 let key = packet.g4();
                 let offset = packet.g4();
                 table.insert(key, Some(offset));

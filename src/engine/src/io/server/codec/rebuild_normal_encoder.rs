@@ -7,18 +7,22 @@ use crate::io::server::protocol::server_protocol::ServerProtocol;
 pub struct RebuildNormalEncoder;
 
 impl RebuildNormalEncoder {
+    #[inline]
     pub fn new() -> Self {
         RebuildNormalEncoder
     }
 }
 
 impl MessageEncoder<RebuildNormal> for RebuildNormalEncoder {
+    #[inline]
     fn protocol(&self) -> ServerProtocol {
         ServerProtocol::REBUILD_NORMAL
     }
 
     fn encode(&self, packet: &mut Packet, message: RebuildNormal) {
-        let mut temporary_packet: Packet = Packet::from(vec![]);
+        let capacity = 2 + (4 * 4 * message.mapsquares().len()) + 1 + 2 + 2 + 2;
+
+        let mut temporary_packet = Packet::new(capacity);
         temporary_packet.p2add(message.coord_x());
 
         for mapsquare in message.mapsquares() {

@@ -16,7 +16,6 @@ struct TypedEncoder<T: OutgoingMessage> {
 
 pub struct ServerProtocolRepository {
     encoders: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
-    // Cache protocols by message type for faster lookup
     protocol_cache: HashMap<TypeId, ServerProtocol>,
 }
 
@@ -27,7 +26,6 @@ impl ServerProtocolRepository {
             protocol_cache: HashMap::new(),
         };
 
-        // Pre-register known encoders
         repository.bind::<RebuildNormal>(RebuildNormalEncoder::new());
         repository.bind::<If_OpenTop>(If_OpenTopEncoder::new());
         repository.bind::<If_OpenSub>(If_OpenSubEncoder::new());
@@ -43,11 +41,9 @@ impl ServerProtocolRepository {
             panic!("Duplicate encoder encountered for TypeId: {:?}", type_id);
         }
 
-        // Cache the protocol for faster lookups
         let protocol = encoder.protocol();
         self.protocol_cache.insert(type_id, protocol);
 
-        // Store the typed encoder
         let typed_encoder = TypedEncoder {
             encoder: Box::new(encoder),
         };
@@ -58,7 +54,6 @@ impl ServerProtocolRepository {
     pub fn get_encoder<T: 'static + OutgoingMessage>(&self, _: &T) -> Option<&(dyn MessageEncoder<T> + Send + Sync)> {
         let type_id = TypeId::of::<T>();
 
-        // Fast path using direct lookup by TypeId
         self.encoders.get(&type_id)
             .and_then(|box_any| box_any.downcast_ref::<TypedEncoder<T>>())
             .map(|typed| typed.encoder.as_ref())
@@ -66,15 +61,12 @@ impl ServerProtocolRepository {
 
     #[inline]
     pub fn get_protocol<T: 'static + OutgoingMessage>(&self, _: &T) -> Option<ServerProtocol> {
-        // Direct lookup in protocol cache
         self.protocol_cache.get(&TypeId::of::<T>()).cloned()
     }
 }
 
-// Use lazy_static for global singleton access
 lazy_static::lazy_static! {
     pub static ref SERVER_PROTOCOL_REPOSITORY: ServerProtocolRepository = {
-        // Initialize the repository with all known encoders
         ServerProtocolRepository::new()
     };
 }

@@ -14,62 +14,51 @@ pub trait OutgoingMessage: Debug + Send + PartialEq {
     fn write_self(&self, player: &mut Player);
 }
 
-// Define a macro to implement OutgoingMessage trait for a type
-macro_rules! impl_outgoing_message {
-    ($message_type:ty) => {
-        impl OutgoingMessage for $message_type {
-            #[inline]
-            fn priority(&self) -> ServerProtocolPriority {
-                ServerProtocolPriority::IMMEDIATE
-            }
-
-            #[inline]
-            fn write_self(&self, player: &mut Player) {
-                if !player.is_client_connected() {
-                    return;
-                }
-
-                // Get protocol from repository
-                let protocol = match player.get_server_protocol_repository().get_encoder(self) {
-                    Some(encoder) => encoder.protocol(),
-                    None => return,
-                };
-
-                // Set protocol ID
-                if player.client.encryptor.is_some() {
-                    // TODO - ISAAC handling
-                } else {
-                    player.client.outbound.p1(protocol.id);
-                }
-
-                // Encode message directly
-                if let Some(encoder) = player.get_server_protocol_repository().get_encoder(self) {
-                    encoder.encode(&mut player.client.outbound, self.clone());
-                    player.client.write_packet().expect("Write packet failed");
-                }
-            }
-        }
-    };
-}
-
-// Apply the macro to each message type
-impl_outgoing_message!(RebuildNormal);
-impl_outgoing_message!(If_OpenTop);
-impl_outgoing_message!(If_OpenSub);
-impl_outgoing_message!(InfoMessage);
-
-// Define a macro to generate OutgoingMessageEnum and its implementations
-macro_rules! define_outgoing_message_enum {
+macro_rules! define_outgoing_messages {
     (
         $(($variant:ident, $type:ty)),*
     ) => {
-        // Define the OutgoingMessageEnum
+        // Implement OutgoingMessage for each type
+        $(
+            impl OutgoingMessage for $type {
+                #[inline]
+                fn priority(&self) -> ServerProtocolPriority {
+                    ServerProtocolPriority::IMMEDIATE
+                }
+
+                #[inline]
+                fn write_self(&self, player: &mut Player) {
+                    if !player.is_client_connected() {
+                        return;
+                    }
+
+                    // Get protocol from repository
+                    let protocol = match player.get_server_protocol_repository().get_encoder(self) {
+                        Some(encoder) => encoder.protocol(),
+                        None => return,
+                    };
+
+                    // Set protocol ID
+                    if player.client.encryptor.is_some() {
+                        // TODO - ISAAC handling 
+                    } else {
+                        player.client.outbound.p1(protocol.id);
+                    }
+
+                    // Encode message directly
+                    if let Some(encoder) = player.get_server_protocol_repository().get_encoder(self) {
+                        encoder.encode(&mut player.client.outbound, self.clone());
+                        player.client.write_packet().expect("Write packet failed");
+                    }
+                }
+            }
+        )*
+
         #[derive(Debug, Clone, PartialEq)]
         pub enum OutgoingMessageEnum {
             $($variant($type)),*
         }
 
-        // Implement OutgoingMessage for OutgoingMessageEnum
         impl OutgoingMessage for OutgoingMessageEnum {
             #[inline]
             fn priority(&self) -> ServerProtocolPriority {
@@ -86,7 +75,6 @@ macro_rules! define_outgoing_message_enum {
             }
         }
 
-        // Maintain original methods for compatibility
         impl OutgoingMessageEnum {
             pub fn get_protocol(&self, repo: &ServerProtocolRepository) -> Option<ServerProtocol> {
                 match self {
@@ -121,8 +109,8 @@ macro_rules! define_outgoing_message_enum {
     };
 }
 
-// Apply the macro to generate the enum and implementations
-define_outgoing_message_enum!(
+// Apply the unified macro to all message types
+define_outgoing_messages!(
     (RebuildNormal, RebuildNormal),
     (IfOpenTop, If_OpenTop),
     (IfOpenSub, If_OpenSub),

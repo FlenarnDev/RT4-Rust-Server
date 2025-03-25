@@ -7,10 +7,12 @@ use crate::io::server::protocol::server_protocol::ServerProtocol;
 pub struct If_OpenTopEncoder;
 
 impl If_OpenTopEncoder {
+    #[inline]
     pub fn new() -> Self { If_OpenTopEncoder }
 }
 
 impl MessageEncoder<If_OpenTop> for If_OpenTopEncoder {
+    #[inline]
     fn protocol(&self) -> ServerProtocol { ServerProtocol::IF_OPENTOP }
 
     fn encode(&self, packet: &mut Packet, message: If_OpenTop) {
