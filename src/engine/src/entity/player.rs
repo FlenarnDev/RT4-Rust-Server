@@ -22,7 +22,7 @@ use crate::io::server::model::if_opentop::If_OpenTop;
 use crate::io::server::model::rebuild_normal::RebuildNormal;
 use crate::io::server::outgoing_message::{OutgoingMessage, OutgoingMessageEnum};
 use crate::io::server::protocol::server_protocol_priority::ServerProtocolPriority;
-use crate::io::server::protocol::server_protocol_repository::SERVER_PROTOCOL_REPOSITORY;
+use crate::io::server::protocol::server_protocol_repository::{ServerProtocolRepository, SERVER_PROTOCOL_REPOSITORY};
 use crate::script::script_pointer::ScriptPointer;
 use crate::script::script_provider::ScriptProvider;
 use crate::script::script_runner::ScriptRunner;
@@ -310,10 +310,13 @@ impl Player {
                 self.client.opcode = self.client.inbound.g1();
             }
 
-            if let Some(packet_type) = &BY_ID[self.client.opcode as usize] {
+            if let Some(packet_type) = &BY_ID.get(self.client.opcode as usize).cloned().flatten() {
                 self.client.waiting = packet_type.length;
             } else {
-                debug!("Unknown packet type received: {}", self.client.opcode);
+                // Avoid string formatting in hot path
+                if cfg!(debug_assertions) {
+                    debug!("Unknown packet type: {}", self.client.opcode);
+                }
                 self.client.opcode = 0;
                 self.client.shutdown();
                 return false;
@@ -327,7 +330,7 @@ impl Player {
             self.client.read_packet_with_size(2).unwrap();
             self.client.waiting = self.client.inbound.g2() as i32;
 
-            // TODO - Don't quite understand this logic, research.
+            // Avoid processing potentially malicious packets
             if self.client.waiting > 1600 {
                 self.client.shutdown();
                 return false;
@@ -339,25 +342,40 @@ impl Player {
         }
 
         self.client.read_packet_with_size(self.client.waiting as usize).unwrap();
-        let packet_type = &BY_ID[self.client.opcode as usize].clone().unwrap();
 
-        let decoder = get_decoder(packet_type);
+        // Get packet type information
+        let packet_type = match &BY_ID[self.client.opcode as usize] {
+            Some(pt) => pt.clone(),
+            None => {
+                self.client.opcode = 0;
+                return false;
+            }
+        };
+
+        // Process the packet with the appropriate decoder
+        let decoder = get_decoder(&packet_type);
 
         if let Some(decoder) = decoder {
             let waiting_size = self.client.waiting as usize;
             let message = decoder.decode_erased(self.client.inbound(), waiting_size);
-            let success: bool = get_handler(packet_type).map_or(false, |handler| handler.handle_erased(&*message, self));
 
-            if !success {
-                debug!("No handler for packet: {:?}", packet_type);
-            }
-
-            if success && message.category() == ClientProtocolCategory::USER_EVENT {
-                self.user_limit += 1;
-            } else if message.category() == ClientProtocolCategory::RESTRICTED_EVENT {
-                self.restricted_limit += 1;
+            // Handle the message
+            let success = if let Some(handler) = get_handler(&packet_type) {
+                handler.handle_erased(&*message, self)
             } else {
-                self.client_limit += 1;
+                if cfg!(debug_assertions) {
+                    debug!("No handler for packet: {:?}", packet_type);
+                }
+                false
+            };
+
+            // Update limits based on message category
+            if success {
+                match message.category() {
+                    ClientProtocolCategory::USER_EVENT => self.user_limit += 1,
+                    ClientProtocolCategory::RESTRICTED_EVENT => self.restricted_limit += 1,
+                    _ => self.client_limit += 1,
+                }
             }
         }
 
@@ -392,26 +410,38 @@ impl Player {
     /// social
     pub fn on_login(&mut self) {
         let start = Instant::now();
+
+        // Process initial data
         self.initial_login_data();
         self.rebuild_normal(false);
 
-        // Initial interface settings.
+        // Determine window ID once
         let window_id = if self.window_status.window_mode.is_resizeable() { 746 } else { 548 };
+
+        // Get verification ID once and reuse
         let mut verify_id = self.get_incremented_verify_id();
 
-        self.write(OutgoingMessageEnum::from(If_OpenTop::new(window_id, false, verify_id)));
-        verify_id = self.get_incremented_verify_id();
-        self.write(OutgoingMessageEnum::from(If_OpenSub::new(window_id, 100, 662, 1, verify_id)));
-        //self.write(If_OpenSub::new(752, 8, 137, 0, self.player.get_incremented_verify_id()));
+        // Create and send top interface message
+        self.write(If_OpenTop::new(window_id, false, verify_id));
 
-        let login_trigger = ScriptProvider::get_by_trigger_specific(ServerTriggerTypes::LOGIN, -1, -1);
-        if let Some(trigger) = login_trigger {
-            self.execute_script(ScriptRunner::init(trigger, Some(self.clone().as_entity_type()), None, None), Some(true), None)
+        // Increment and reuse verification ID
+        verify_id = self.get_incremented_verify_id();
+        self.write(If_OpenSub::new(window_id, 100, 662, 1, verify_id));
+
+        // Handle login trigger script
+        if let Some(trigger) = ScriptProvider::get_by_trigger_specific(ServerTriggerTypes::LOGIN, -1, -1) {
+            // Create script state once
+            let script = ScriptRunner::init(trigger, Some(self.clone().as_entity_type()), None, None);
+            self.execute_script(script, Some(true), None);
         }
 
-        // TODO - last step
+        // Activate player
         self.set_active(true);
-        debug!("Processed on login in: {:?}", start.elapsed());
+
+        // Only log timing in debug mode
+        if cfg!(debug_assertions) {
+            debug!("Processed on login in: {:?}", start.elapsed());
+        }
     }
 
     fn initial_login_data(&mut self) {
@@ -428,27 +458,46 @@ impl Player {
     }
 
     fn rebuild_normal(&mut self, reconnect: bool) {
+        // Get origin coordinates once
         let origin_x = CoordGrid::zone(self.get_origin_coord().x()) as i16;
         let origin_z = CoordGrid::zone(self.get_origin_coord().z()) as i16;
 
+        // Pre-calculate zone boundaries
         let reload_left_x = (origin_x - 4) << 3;
         let reload_right_x = (origin_x + 5) << 3;
         let reload_top_z = (origin_z + 5) << 3;
         let reload_bottom_z = (origin_z - 4) << 3;
 
-        // If the build area should be regenerated, do so now
-        if self.coord().x() < reload_left_x as u16
-            || self.coord().z() < reload_bottom_z as u16
-            || self.coord().x() > (reload_right_x - 1) as u16
-            || self.coord().z() > (reload_top_z - 1) as u16
-            || reconnect
-        {
-            self.write(OutgoingMessageEnum::from(RebuildNormal::new(CoordGrid::zone(self.get_coord().x()) as i32, CoordGrid::zone(self.get_coord().z()) as i32, self.get_coord().local_x(), self.get_coord().local_z())));
+        // Cache current coordinates
+        let current_x = self.coord().x();
+        let current_z = self.coord().z();
+
+        // Determine if rebuild is needed
+        let needs_rebuild = reconnect ||
+            current_x < reload_left_x as u16 ||
+            current_z < reload_bottom_z as u16 ||
+            current_x > (reload_right_x - 1) as u16 ||
+            current_z > (reload_top_z - 1) as u16;
+
+        if needs_rebuild {
+            // Create the rebuild message directly with cached values
+            let rebuild_msg = RebuildNormal::new(
+                CoordGrid::zone(current_x) as i32,
+                CoordGrid::zone(current_z) as i32,
+                self.get_coord().local_x(),
+                self.get_coord().local_z()
+            );
+
+            // Write the message directly
+            self.write(rebuild_msg);
+
+            // Update origin coordinate
             self.set_origin_coord(self.get_coord());
         }
     }
 
     pub fn decode_in(&mut self, current_tick: i32) -> bool {
+        // Reset state
         self.user_path.clear();
         self.op_called = false;
 
@@ -458,11 +507,24 @@ impl Player {
 
         self.last_connected = current_tick;
 
+        // Reset counters
         self.user_limit = 0;
         self.client_limit = 0;
         self.restricted_limit = 0;
 
-        while self.user_limit < ClientProtocolCategory::USER_EVENT.limit && self.client_limit < ClientProtocolCategory::CLIENT_EVENT.limit && self.restricted_limit < ClientProtocolCategory::RESTRICTED_EVENT.limit && self.read() {}
+        // Cache limit values to avoid repeated access
+        let max_user = ClientProtocolCategory::USER_EVENT.limit;
+        let max_client = ClientProtocolCategory::CLIENT_EVENT.limit;
+        let max_restricted = ClientProtocolCategory::RESTRICTED_EVENT.limit;
+
+        // Process packets until limits are reached or no more data is available
+        while self.user_limit < max_user &&
+            self.client_limit < max_client &&
+            self.restricted_limit < max_restricted {
+            if !self.read() {
+                break;
+            }
+        }
 
         if self.bytes_read > 0 {
             self.last_response = current_tick;
@@ -472,6 +534,16 @@ impl Player {
         true
     }
 
+    #[inline]
+    pub fn write_inner(&mut self, message: OutgoingMessageEnum) {
+        if !self.is_client_connected() {
+            return;
+        }
+
+        // Delegate to the message's write_self implementation
+        message.write_self(self);
+    }
+    
     pub fn encode_out(&mut self) {
         if !self.is_client_connected() {
             return;
@@ -479,45 +551,36 @@ impl Player {
 
         // TODO - modal refresh!
 
-        let messages = std::mem::take(&mut self.outgoing_messages);
-        for message in messages {
+        // Take ownership of the messages to avoid cloning
+        let mut messages = std::mem::take(&mut self.outgoing_messages);
+
+        // Process all messages
+        for message in &messages {
             message.write_self(self);
         }
-        self.outgoing_messages.clear();
+
+        // Clear and reuse the vector to avoid reallocation
+        messages.clear();
+        self.outgoing_messages = messages;
     }
 
-    pub fn write_inner(&mut self, message: OutgoingMessageEnum) {
-        if !self.is_client_connected() {
-            return;
-        }
-
-        // Use the direct encoding method
-        let protocol = match message.encode_to_packet(&mut self.client.outbound, &SERVER_PROTOCOL_REPOSITORY) {
-            Some(protocol) => protocol,
-            None =>  {
-                debug!("returned in protocol matcher");
-                return
-            },
-        };
-
-        // Set protocol ID
-        if self.client.encryptor.is_some() {
-            // TODO - ISAAC handling
-        } else {
-            self.client.outbound.p1(protocol.id);
-        }
-        debug!("time to write packet");
-        self.client.write_packet().expect("Write packet failed");
-    }
-    fn write(&mut self, message: OutgoingMessageEnum) {
+    #[inline]
+    pub fn write<T: OutgoingMessage + Into<OutgoingMessageEnum>>(&mut self, message: T) {
         if !self.is_client_connected() {
             return;
         }
 
         if message.priority() == ServerProtocolPriority::IMMEDIATE {
-            self.write_inner(message);
+            // For immediate messages, write directly without enum conversion
+            message.write_self(self);
         } else {
-            self.outgoing_messages.push(message);
+            // Only convert to enum for queued messages
+            self.outgoing_messages.push(message.into());
         }
+    }
+
+    #[inline]
+    pub fn get_server_protocol_repository(&self) -> &'static ServerProtocolRepository {
+        &SERVER_PROTOCOL_REPOSITORY
     }
 }
