@@ -1,4 +1,4 @@
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Packet {
     pub data: Vec<u8>,
     pub position: usize,

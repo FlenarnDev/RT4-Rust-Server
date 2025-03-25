@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct If_OpenSub {
     pub(crate) window_id: u32,
     pub(crate) component_id: u32,

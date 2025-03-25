@@ -13,7 +13,7 @@ impl If_OpenSubEncoder {
 impl MessageEncoder<If_OpenSub> for If_OpenSubEncoder {
     fn protocol(&self) -> ServerProtocol { ServerProtocol::IF_OPENSUB }
 
-    fn encode(&self, packet: &mut Packet, message: &If_OpenSub) {
+    fn encode(&self, packet: &mut Packet, message: If_OpenSub) {
         packet.p1(message.flags as i32);
         
         let component_pointer = message.window_id << 16 | message.component_id;

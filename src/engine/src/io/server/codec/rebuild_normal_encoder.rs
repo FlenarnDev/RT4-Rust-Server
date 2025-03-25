@@ -17,7 +17,7 @@ impl MessageEncoder<RebuildNormal> for RebuildNormalEncoder {
         ServerProtocol::REBUILD_NORMAL
     }
 
-    fn encode(&self, packet: &mut Packet, message: &RebuildNormal) {
+    fn encode(&self, packet: &mut Packet, message: RebuildNormal) {
         let mut temporary_packet: Packet = Packet::from(vec![]);
         temporary_packet.p2add(message.coord_x());
 

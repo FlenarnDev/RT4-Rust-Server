@@ -1,4 +1,4 @@
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Isaac {
     rsl: Vec<i32>,
     mem: Vec<i32>,

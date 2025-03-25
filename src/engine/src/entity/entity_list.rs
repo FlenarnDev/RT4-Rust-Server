@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use crate::entity::entity::EntityBehavior;
-use crate::entity::network_player::NetworkPlayer;
 use crate::entity::npc::NPC;
+use crate::entity::player::Player;
 
 pub struct EntityList<T: EntityBehavior> {
     // Direct storage - no more Rc<RefCell<T>>
@@ -190,17 +190,14 @@ impl<T: EntityBehavior> EntityList<T> {
     }
 }
 
-// This implementation has been completely redesigned to work without Rc<RefCell>
-// The challenge is that the Engine code expects the behavior of Rc<RefCell>
-// We'll need to update NetworkPlayerList and NPCList to adapt to this change
 
-pub struct NetworkPlayerList {
-    list: EntityList<NetworkPlayer>,
+pub struct PlayerList {
+    list: EntityList<Player>,
 }
 
-impl NetworkPlayerList {
+impl PlayerList {
     pub fn new(size: usize) -> Self {
-        NetworkPlayerList {
+        PlayerList {
             list: EntityList::new(size, 1),
         }
     }
@@ -226,15 +223,15 @@ impl NetworkPlayerList {
         self.list.count()
     }
 
-    pub fn get(&self, id: usize) -> Option<&NetworkPlayer> {
+    pub fn get(&self, id: usize) -> Option<&Player> {
         self.list.get(id)
     }
 
-    pub fn get_mut(&mut self, id: usize) -> Option<&mut NetworkPlayer> {
+    pub fn get_mut(&mut self, id: usize) -> Option<&mut Player> {
         self.list.get_mut(id)
     }
 
-    pub fn set(&mut self, id: usize, entity: NetworkPlayer) -> Result<(), &'static str> {
+    pub fn set(&mut self, id: usize, entity: Player) -> Result<(), &'static str> {
         self.list.set(id, entity)
     }
 
@@ -248,14 +245,14 @@ impl NetworkPlayerList {
 
     pub fn for_each<F>(&self, mut f: F)
     where
-        F: FnMut(&NetworkPlayer)
+        F: FnMut(&Player)
     {
         self.list.for_each(f)
     }
 
     pub fn for_each_mut<F>(&mut self, mut f: F)
     where
-        F: FnMut(&mut NetworkPlayer)
+        F: FnMut(&mut Player)
     {
         self.list.for_each_mut(f)
     }

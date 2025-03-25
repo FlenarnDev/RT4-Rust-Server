@@ -1,5 +1,6 @@
 use std::cmp::PartialEq;
 use std::error::Error;
+use std::time::Instant;
 use crate::entity::block_walk::BlockWalk;
 use crate::entity::entity::{Entity, EntityBehavior};
 use crate::entity::entity_lifecycle::EntityLifeCycle;
@@ -11,49 +12,28 @@ use constants::window_mode::window_mode;
 use log::debug;
 use crate::entity::entity_type::EntityType;
 use crate::entity::pathing_entity::PathingEntity;
+use crate::entity::player_type::PlayerType;
+use crate::game_connection::GameClient;
+use crate::io::client::protocol::client_protocol::BY_ID;
+use crate::io::client::protocol::client_protocol_category::ClientProtocolCategory;
+use crate::io::client::protocol::client_protocol_repository::{get_decoder, get_handler, MessageDecoderErasure};
+use crate::io::server::model::if_opensub::If_OpenSub;
+use crate::io::server::model::if_opentop::If_OpenTop;
+use crate::io::server::model::rebuild_normal::RebuildNormal;
+use crate::io::server::outgoing_message::{OutgoingMessage, OutgoingMessageEnum};
+use crate::io::server::protocol::server_protocol_priority::ServerProtocolPriority;
+use crate::io::server::protocol::server_protocol_repository::SERVER_PROTOCOL_REPOSITORY;
 use crate::script::script_pointer::ScriptPointer;
+use crate::script::script_provider::ScriptProvider;
 use crate::script::script_runner::ScriptRunner;
 use crate::script::script_state::ScriptState;
-
-pub struct LevelExperience {
-    experience_table: [i32; 99],
-}
-
-impl LevelExperience {
-    pub fn new() -> Self {
-        let mut experience_table: [i32; 99] = [0; 99];
-        let mut acc = 0;
-
-        for i in 0..99 {
-            let level = i as f64 + 1.0;
-            let delta = (level + 2.0_f64.powf(level / 7.0) * 300.0).floor() as i32;
-            acc += delta;
-            experience_table[i] = (acc / 4) * 10;
-        }
-        
-        Self { experience_table }
-    }
-    
-    pub fn get_level_by_experience(&self, experience: i32) -> i32 {
-        for i in (0..99).rev() {
-            if experience >= self.experience_table[i] {
-                return (i + 2).min(99) as i32;
-            }
-        }
-        1
-    }
-    
-    pub fn get_experience_by_level(&self, level: i32) -> i32 {
-        if level < 2 || level > 100 {
-            panic!("Level must be between 2 and 100");
-        }
-        self.experience_table[(level - 2) as usize]
-    }
-}
-
+use crate::script::server_trigger_types::ServerTriggerTypes;
 
 #[derive(Clone, PartialEq)]
 pub struct Player {
+    // Player type
+    pub player_type: PlayerType,
+
     // Permanent
     pub pathing_entity: PathingEntity,
     pub move_restrict: MoveRestrict,
@@ -67,6 +47,20 @@ pub struct Player {
     pub origin_coord: CoordGrid,
     
     // Client data
+    pub client: GameClient,
+    /// User packet limit
+    pub user_limit: u8,
+    /// Client packet limit
+    pub client_limit: u8,
+    pub restricted_limit: u8,
+
+    pub outgoing_messages: Vec<OutgoingMessageEnum>,
+
+    pub user_path: Vec<i32>,
+    pub op_called: bool,
+    pub bytes_read: usize,
+
+
     pub window_status: WindowStatus,
     
     staff_mod_level: i32,
@@ -82,13 +76,11 @@ pub struct Player {
     
     pub protect: bool,  // Whether protected access is available.
     pub active_script: Option<Box<ScriptState>>,
-    
-    // TODO - Active Script
-
 }
 impl Player {
-    pub fn new(coord: CoordGrid, gender: u8, window_status: WindowStatus, staff_mod_level: i32, pid: usize) -> Player {
+    pub fn new(client: &mut Option<GameClient>, coord: CoordGrid, gender: u8, window_status: WindowStatus, staff_mod_level: i32, pid: usize) -> Player {
         Player {
+            player_type: PlayerType::ClientBound,
             pathing_entity: PathingEntity::new(
                 coord,
                 1,
@@ -103,6 +95,14 @@ impl Player {
             pid,
             origin_coord: CoordGrid { coord: 0 },
             staff_mod_level,
+            client: GameClient::take_ownership(client),
+            user_limit: 0,
+            client_limit: 0,
+            restricted_limit: 0,
+            outgoing_messages: Vec::new(),
+            user_path: Vec::new(),
+            op_called: false,
+            bytes_read: 0,
             window_status,
             request_logout: false,
             request_idle_logout: false,
@@ -118,6 +118,7 @@ impl Player {
     
     pub fn new_dummy(coord: CoordGrid, gender: u8, pid: usize) -> Player {
         Player {
+            player_type: PlayerType::Headless,
             pathing_entity: PathingEntity::new(
               coord,
               1,
@@ -132,6 +133,14 @@ impl Player {
             pid,
             origin_coord: CoordGrid { coord: 0 },
             staff_mod_level: 0,
+            client: GameClient::new_dummy(),
+            user_limit: 0,
+            client_limit: 0,
+            restricted_limit: 0,
+            outgoing_messages: Vec::new(),
+            user_path: Vec::new(),
+            op_called: false,
+            bytes_read: 0,
             window_status: WindowStatus { window_mode: window_mode::NULL, canvas_width: 0, canvas_height: 0, anti_aliasing_mode: 0 },
             request_logout: false,
             request_idle_logout: false,
@@ -143,6 +152,15 @@ impl Player {
             protect: false,
             active_script: None,
         }
+    }
+
+    #[inline]
+    pub fn is_client_connected(&self) -> bool {
+        if self.player_type == PlayerType::Headless {
+            return false;
+        }
+
+        self.client.is_connection_active()
     }
 
     pub fn get_entity(&self) -> &Entity {
@@ -274,6 +292,232 @@ impl Player {
         } else if self.active_script.as_ref().map_or(false, |active_script| &script_clone == active_script.as_ref()) {
             self.active_script = None;
             // TODO - close modal crap goes here
+        }
+    }
+
+    #[inline]
+    fn read(&mut self) -> bool {
+        if !self.client.has_available(1).unwrap() {
+            return false
+        }
+
+        if self.client.opcode == 0 {
+            self.client.read_packet_with_size(1).unwrap();
+
+            if !self.client.decryptor.is_none() {
+                // TODO - ISAAC stuff
+            } else {
+                self.client.opcode = self.client.inbound.g1();
+            }
+
+            if let Some(packet_type) = &BY_ID[self.client.opcode as usize] {
+                self.client.waiting = packet_type.length;
+            } else {
+                debug!("Unknown packet type received: {}", self.client.opcode);
+                self.client.opcode = 0;
+                self.client.shutdown();
+                return false;
+            }
+        }
+
+        if self.client.waiting == -1 {
+            self.client.read_packet_with_size(1).unwrap();
+            self.client.waiting = self.client.inbound.g1() as i32;
+        } else if self.client.waiting == -2 {
+            self.client.read_packet_with_size(2).unwrap();
+            self.client.waiting = self.client.inbound.g2() as i32;
+
+            // TODO - Don't quite understand this logic, research.
+            if self.client.waiting > 1600 {
+                self.client.shutdown();
+                return false;
+            }
+        }
+
+        if !self.client.has_available(self.client.waiting as usize).unwrap() {
+            return false;
+        }
+
+        self.client.read_packet_with_size(self.client.waiting as usize).unwrap();
+        let packet_type = &BY_ID[self.client.opcode as usize].clone().unwrap();
+
+        let decoder = get_decoder(packet_type);
+
+        if let Some(decoder) = decoder {
+            let waiting_size = self.client.waiting as usize;
+            let message = decoder.decode_erased(self.client.inbound(), waiting_size);
+            let success: bool = get_handler(packet_type).map_or(false, |handler| handler.handle_erased(&*message, self));
+
+            if !success {
+                debug!("No handler for packet: {:?}", packet_type);
+            }
+
+            if success && message.category() == ClientProtocolCategory::USER_EVENT {
+                self.user_limit += 1;
+            } else if message.category() == ClientProtocolCategory::RESTRICTED_EVENT {
+                self.restricted_limit += 1;
+            } else {
+                self.client_limit += 1;
+            }
+        }
+
+        self.bytes_read += self.client.inbound.position;
+
+        self.client.opcode = 0;
+        true
+    }
+
+    /// initial_login
+    ///
+    /// rebuild_normal
+    ///
+    /// chat_filter_settings
+    ///
+    /// varp_reset
+    ///
+    /// varps
+    ///
+    /// inventories
+    ///
+    /// interfaces
+    ///
+    /// stats
+    ///
+    /// runweight
+    ///
+    /// runenergy
+    ///
+    /// reset animations
+    ///
+    /// social
+    pub fn on_login(&mut self) {
+        let start = Instant::now();
+        self.initial_login_data();
+        self.rebuild_normal(false);
+
+        // Initial interface settings.
+        let window_id = if self.window_status.window_mode.is_resizeable() { 746 } else { 548 };
+        let mut verify_id = self.get_incremented_verify_id();
+
+        self.write(OutgoingMessageEnum::from(If_OpenTop::new(window_id, false, verify_id)));
+        verify_id = self.get_incremented_verify_id();
+        self.write(OutgoingMessageEnum::from(If_OpenSub::new(window_id, 100, 662, 1, verify_id)));
+        //self.write(If_OpenSub::new(752, 8, 137, 0, self.player.get_incremented_verify_id()));
+
+        let login_trigger = ScriptProvider::get_by_trigger_specific(ServerTriggerTypes::LOGIN, -1, -1);
+        if let Some(trigger) = login_trigger {
+            self.execute_script(ScriptRunner::init(trigger, Some(self.clone().as_entity_type()), None, None), Some(true), None)
+        }
+
+        // TODO - last step
+        self.set_active(true);
+        debug!("Processed on login in: {:?}", start.elapsed());
+    }
+
+    fn initial_login_data(&mut self) {
+        self.client.outbound.p1(self.get_staff_mod_level()); // Staff mod level
+        self.client.outbound.p1(0); // Blackmarks?
+        self.client.outbound.p1(0); // Underage (false = 0)
+        self.client.outbound.p1(0); // Parental Chat consent
+        self.client.outbound.p1(0); // Parental Advert Consent
+        self.client.outbound.p1(0); // Map Quick Chat
+        self.client.outbound.p1(0); // Mouse Recorder
+        self.client.outbound.p2(self.get_pid() as i32); // Player ID
+        self.client.outbound.p1(1); // Player Member
+        self.client.outbound.p1(1); // Members map
+    }
+
+    fn rebuild_normal(&mut self, reconnect: bool) {
+        let origin_x = CoordGrid::zone(self.get_origin_coord().x()) as i16;
+        let origin_z = CoordGrid::zone(self.get_origin_coord().z()) as i16;
+
+        let reload_left_x = (origin_x - 4) << 3;
+        let reload_right_x = (origin_x + 5) << 3;
+        let reload_top_z = (origin_z + 5) << 3;
+        let reload_bottom_z = (origin_z - 4) << 3;
+
+        // If the build area should be regenerated, do so now
+        if self.coord().x() < reload_left_x as u16
+            || self.coord().z() < reload_bottom_z as u16
+            || self.coord().x() > (reload_right_x - 1) as u16
+            || self.coord().z() > (reload_top_z - 1) as u16
+            || reconnect
+        {
+            self.write(OutgoingMessageEnum::from(RebuildNormal::new(CoordGrid::zone(self.get_coord().x()) as i32, CoordGrid::zone(self.get_coord().z()) as i32, self.get_coord().local_x(), self.get_coord().local_z())));
+            self.set_origin_coord(self.get_coord());
+        }
+    }
+
+    pub fn decode_in(&mut self, current_tick: i32) -> bool {
+        self.user_path.clear();
+        self.op_called = false;
+
+        if !self.is_client_connected() {
+            return false;
+        }
+
+        self.last_connected = current_tick;
+
+        self.user_limit = 0;
+        self.client_limit = 0;
+        self.restricted_limit = 0;
+
+        while self.user_limit < ClientProtocolCategory::USER_EVENT.limit && self.client_limit < ClientProtocolCategory::CLIENT_EVENT.limit && self.restricted_limit < ClientProtocolCategory::RESTRICTED_EVENT.limit && self.read() {}
+
+        if self.bytes_read > 0 {
+            self.last_response = current_tick;
+            self.bytes_read = 0;
+        }
+
+        true
+    }
+
+    pub fn encode_out(&mut self) {
+        if !self.is_client_connected() {
+            return;
+        }
+
+        // TODO - modal refresh!
+
+        let messages = std::mem::take(&mut self.outgoing_messages);
+        for message in messages {
+            message.write_self(self);
+        }
+        self.outgoing_messages.clear();
+    }
+
+    pub fn write_inner(&mut self, message: OutgoingMessageEnum) {
+        if !self.is_client_connected() {
+            return;
+        }
+
+        // Use the direct encoding method
+        let protocol = match message.encode_to_packet(&mut self.client.outbound, &SERVER_PROTOCOL_REPOSITORY) {
+            Some(protocol) => protocol,
+            None =>  {
+                debug!("returned in protocol matcher");
+                return
+            },
+        };
+
+        // Set protocol ID
+        if self.client.encryptor.is_some() {
+            // TODO - ISAAC handling
+        } else {
+            self.client.outbound.p1(protocol.id);
+        }
+        debug!("time to write packet");
+        self.client.write_packet().expect("Write packet failed");
+    }
+    fn write(&mut self, message: OutgoingMessageEnum) {
+        if !self.is_client_connected() {
+            return;
+        }
+
+        if message.priority() == ServerProtocolPriority::IMMEDIATE {
+            self.write_inner(message);
+        } else {
+            self.outgoing_messages.push(message);
         }
     }
 }

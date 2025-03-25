@@ -1,7 +1,7 @@
-use crate::entity::network_player::NetworkPlayer;
+use crate::entity::player::Player;
 use crate::io::client::incoming_message::IncomingMessage;
 
 pub trait MessageHandler: Send + Sync {
     type Message: IncomingMessage + Send + Sync;
-    fn handle(&self, message: &Self::Message, network_player: &mut NetworkPlayer) -> bool;
+    fn handle(&self, message: &Self::Message, player: &mut Player) -> bool;
 }

@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct InfoMessage {}
 
 impl InfoMessage {

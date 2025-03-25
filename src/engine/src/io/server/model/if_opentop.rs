@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct If_OpenTop {
     pub(crate) interface_id: u32,
     pub(crate) interface_type: u8,

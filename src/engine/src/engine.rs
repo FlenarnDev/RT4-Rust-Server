@@ -13,8 +13,7 @@ use crate::io::client_state::ConnectionState;
 use crate::io::rsa::rsa;
 use crate::engine_stat::EngineStat;
 use crate::entity::entity::EntityBehavior;
-use crate::entity::entity_list::{NPCList, NetworkPlayerList};
-use crate::entity::network_player::NetworkPlayer;
+use crate::entity::entity_list::{NPCList, PlayerList};
 use crate::entity::player::Player;
 use crate::entity::window_status::WindowStatus;
 use crate::game_connection::GameClient;
@@ -33,9 +32,9 @@ pub struct Engine {
     // TODO - ops?
     pub cycle_stats: Vec<Duration>,
     pub last_cycle_stats: Vec<Duration>,
-    pub players: NetworkPlayerList,
+    pub players: PlayerList,
     pub npcs: NPCList,
-    pub new_players: Arc<Mutex<Vec<NetworkPlayer>>>,
+    pub new_players: Arc<Mutex<Vec<Player>>>,
     // TODO - game_map
     // TODO - zone_tracking
 }
@@ -88,7 +87,7 @@ impl Engine {
             tick_rate: Duration::from_millis(600),
             cycle_stats: vec![Duration::new(0, 0); 12],
             last_cycle_stats: vec![Duration::new(0, 0); 12],
-            players: NetworkPlayerList::new(Engine::MAX_PLAYERS - 1),
+            players: PlayerList::new(Engine::MAX_PLAYERS - 1),
             npcs: NPCList::new(Engine::MAX_NPCS - 1),
             new_players: Default::default(),
         }
@@ -231,10 +230,10 @@ impl Engine {
         // TODO - separate out stat?
         //self.cycle_stats[EngineStat::BandwidthIn as usize] = 0;
 
-        self.players.for_each_mut(|network_player| {
-            network_player.player.playtime += 1;
+        self.players.for_each_mut(|player| {
+            player.playtime += 1;
 
-            if network_player.is_client_connected() && network_player.decode_in(self.current_tick) {
+            if player.is_client_connected() && player.decode_in(self.current_tick) {
 
             }
         });
@@ -290,30 +289,30 @@ impl Engine {
         let start: Instant = Instant::now();
 
         let mut pids_to_remove = Vec::new();
-        self.players.for_each_mut(|network_player| {
+        self.players.for_each_mut(|player| {
             let mut force: bool = false;
 
-            if self.current_tick - network_player.player.last_response >= Self::TIMEOUT_NO_RESPONSE {
+            if self.current_tick - player.last_response >= Self::TIMEOUT_NO_RESPONSE {
                 // X-logged / timed out for 60s: force logout.
                 debug!("X-logged");
-                network_player.player.logging_out = true;
+                player.logging_out = true;
                 force = true;
-            } else if self.current_tick - network_player.player.last_connected >= Self::TIMEOUT_NO_CONNECTION {
+            } else if self.current_tick - player.last_connected >= Self::TIMEOUT_NO_CONNECTION {
                 // Connection lost for 30s: request idle logout.
                 debug!("idle log");
-                network_player.player.request_idle_logout = true;
+                player.request_idle_logout = true;
             }
 
-            if network_player.player.request_logout || network_player.player.request_idle_logout {
-                if self.current_tick >= network_player.player.prevent_logout_until {
-                    network_player.player.logging_out = true;
+            if player.request_logout || player.request_idle_logout {
+                if self.current_tick >= player.prevent_logout_until {
+                    player.logging_out = true;
                 }
-                network_player.player.request_logout = false;
-                network_player.player.request_idle_logout = false;
+                player.request_logout = false;
+                player.request_idle_logout = false;
             }
 
-            if (network_player.player.logging_out) && (force || self.current_tick >= network_player.player.prevent_logout_until) {
-                pids_to_remove.push(network_player.player.get_pid());
+            if (player.logging_out) && (force || self.current_tick >= player.prevent_logout_until) {
+                pids_to_remove.push(player.get_pid());
             }
         });
 
@@ -334,10 +333,10 @@ impl Engine {
 
         let player_to_add = {
             let mut shared_players = self.new_players.lock().unwrap();
-            shared_players.drain(..).collect::<Vec<NetworkPlayer>>()
+            shared_players.drain(..).collect::<Vec<Player>>()
         };
 
-        for mut network_player in player_to_add {
+        for mut player in player_to_add {
             // Prevent logging in if a player save is being flushed
             // TODO
 
@@ -352,21 +351,21 @@ impl Engine {
             // Prevent logging in when the server is shutting down.
             // TODO
 
-            match self.get_next_pid(Some(&network_player.client)) {
+            match self.get_next_pid(Some(&player.client)) {
                 Ok(pid) => {
-                    network_player.client.write_packet().expect("Failed to write packet to new connection");
-                    network_player.player.set_pid(pid);
-                    self.players.set(pid, network_player).expect("Failed to set player!");
+                    player.client.write_packet().expect("Failed to write packet to new connection");
+                    player.set_pid(pid);
+                    self.players.set(pid, player).expect("Failed to set player!");
 
                     if let Some(player_ref) = self.players.get_mut(pid) {
                         player_ref.on_login();
                     }
                 },
                 Err(_err) => {
-                    network_player.client.outbound = Packet::new(1);
-                    network_player.client.outbound.p1(login_out::WORLD_FULL);
-                    network_player.client.write_packet().expect("Failed to write packet to new connection");
-                    network_player.client.shutdown();
+                    player.client.outbound = Packet::new(1);
+                    player.client.outbound.p1(login_out::WORLD_FULL);
+                    player.client.write_packet().expect("Failed to write packet to new connection");
+                    player.client.shutdown();
                 }
             };
         }
@@ -418,12 +417,12 @@ impl Engine {
     /// Flush packets
     fn process_out(&mut self) {
         let start: Instant = Instant::now();
-        self.players.for_each_mut(|network_player| {
-            if !network_player.is_client_connected() {
+        self.players.for_each_mut(|player| {
+            if !player.is_client_connected() {
                 return;
             }
             // TODO
-            network_player.encode_out(self.current_tick);
+            player.encode_out();
         });
         self.cycle_stats[EngineStat::ClientsOut as usize] = start.elapsed();
     }
@@ -458,12 +457,13 @@ impl Engine {
             if player_ref.is_client_connected() {
                 player_ref.client.shutdown();
             }
-            player_ref.player.set_active(false);
+            player_ref.set_active(false);
         }
         self.players.remove(pid);
     }
 
-    fn on_new_connection(client: &mut GameClient, thread_player: Arc<Mutex<Vec<NetworkPlayer>>>) {
+    fn on_new_connection(client: &mut GameClient, thread_player: Arc<Mutex<Vec<Player>>>) {
+        
         if let Err(err) = client.read_packet_with_size(1) {
             error!("Failed to read packet from client: {}", err);
             client.shutdown();
@@ -564,13 +564,17 @@ impl Engine {
                 GameClient::new_dummy()
             ));
             
-            let network_player = NetworkPlayer::new(
-                Player::new(CoordGrid::from(3200, 0, 3200), 0, window_status, 0, Self::INVALID_PID),
-                &mut new_client
+            let player = Player::new(
+                &mut new_client, 
+                CoordGrid::from(3200, 0, 3200), 
+                0, 
+                window_status, 
+                0, 
+                Self::INVALID_PID
             );
 
             let mut players_lock = thread_player.lock().unwrap();
-            players_lock.push(network_player);
+            players_lock.push(player);
         } else {
             debug!("Invalid opcode from initial connection: [{}]", client.opcode);
             client.outbound.p1(login_out::INVALID_LOGIN_PACKET);
@@ -584,7 +588,10 @@ impl Engine {
         let default = || self.players.next(false, None);
         let client = match client {
             Some(c) => c,
-            None => return default(),
+            None =>  {
+                debug!("no client!");
+                return default()
+            },
         };
 
         let stream = match &client.stream {

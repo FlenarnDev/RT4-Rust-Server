@@ -6,6 +6,7 @@ use crate::io::client_state::ConnectionState;
 use crate::io::isaac::Isaac;
 use crate::io::packet::Packet;
 
+#[derive(Debug)]
 pub struct GameClient {
     pub stream: Option<TcpStream>,
     pub inbound: Packet,
@@ -20,6 +21,42 @@ pub struct GameClient {
     /// Bytes to wait for (if any)
     pub waiting: i32,
     read_buffer: Vec<u8>,
+}
+
+impl Clone for GameClient {
+    fn clone(&self) -> Self {
+        GameClient {
+            // For TcpStream, we can't clone it, so we'll use None
+            stream: None,  // The clone will need to re-establish connection
+            inbound: self.inbound.clone(),
+            outbound: self.outbound.clone(),
+            state: self.state.clone(),
+            total_bytes_read: self.total_bytes_read,
+            total_bytes_written: self.total_bytes_written,
+            encryptor: self.encryptor.clone(),
+            decryptor: self.decryptor.clone(),
+            opcode: self.opcode,
+            waiting: self.waiting,
+            read_buffer: self.read_buffer.clone(),
+        }
+    }
+}
+
+impl PartialEq for GameClient {
+    /// Since [TcpStream] isn't built to handle full comparisons we can't derive 'PartialEq', we will eventually handle
+    /// parts of it in comparisons.
+    fn eq(&self, other: &Self) -> bool {
+        self.inbound == other.inbound &&
+            self.outbound == other.outbound &&
+            self.state == other.state &&
+            self.total_bytes_read == other.total_bytes_read &&
+            self.total_bytes_written == other.total_bytes_written &&
+            self.encryptor == other.encryptor &&
+            self.decryptor == other.decryptor &&
+            self.opcode == other.opcode &&
+            self.waiting == other.waiting &&
+            self.read_buffer == other.read_buffer
+    }
 }
 
 impl GameClient {

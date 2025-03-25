@@ -1,9 +1,6 @@
-use crate::io::server::outgoing_message::OutgoingMessage;
-use crate::io::server::protocol::server_protocol_priority::ServerProtocolPriority;
 use std::collections::BTreeSet;
-use crate::entity::network_player::NetworkPlayer;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RebuildNormal {
     zone_x: i32,
     zone_z: i32,

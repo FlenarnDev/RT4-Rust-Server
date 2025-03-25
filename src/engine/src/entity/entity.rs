@@ -1,6 +1,5 @@
 use crate::engine::Engine;
 use crate::entity::entity_lifecycle::EntityLifeCycle;
-use crate::entity::network_player::NetworkPlayer;
 use crate::entity::non_pathing_entity::NonPathingEntity;
 use crate::entity::npc::NPC;
 use crate::entity::pathing_entity::PathingEntity;
@@ -148,4 +147,3 @@ impl_entity_behavior_for!(NonPathingEntity, field: entity);
 
 impl_entity_behavior_for!(Player, delegate: pathing_entity);
 impl_entity_behavior_for!(NPC, delegate: pathing_entity);
-impl_entity_behavior_for!(NetworkPlayer, delegate: player.pathing_entity);
