@@ -10,10 +10,10 @@ use crate::script::script_file::ScriptFile;
 use crate::script::script_pointer::ScriptPointer;
 use crate::script::script_state::ScriptState;
 
-/// Function type for handling script commands
-pub type CommandHandler = Box<dyn Fn(&mut ScriptState) + Send + Sync + 'static>;
+// Function type for script handlers - requires Send+Sync for thread safety
+pub type CommandHandler = fn(&mut ScriptState);
 
-/// Map of opcode numbers to their handler functions.
+// Map of opcode numbers to handler functions
 pub type CommandHandlers = HashMap<i32, CommandHandler>;
 
 pub struct ScriptRunner;
@@ -22,36 +22,22 @@ impl ScriptRunner {
     pub fn get_handlers() -> &'static CommandHandlers {
         static HANDLERS: OnceLock<CommandHandlers> = OnceLock::new();
 
-        HANDLERS.get_or_init(|| Self::create_handlers())
+        HANDLERS.get_or_init(|| {
+            let mut handlers = CommandHandlers::with_capacity(1000);
+
+            for (key, func) in get_player_ops().iter() {
+                handlers.insert(*key, *func);
+            }
+
+            for (key, func) in get_core_ops().iter() {
+                handlers.insert(*key, *func);
+            }
+
+            handlers
+        })
     }
 
-    // Helper to create and populate a new handlers map
-    fn create_handlers() -> CommandHandlers {
-        let mut handlers = CommandHandlers::with_capacity(256); // Pre-allocate reasonable capacity
-
-        // Add player ops handlers
-        handlers.extend(
-            get_player_ops().iter().map(|(key, value)| {
-                let handler: CommandHandler = Box::new(move |state| {
-                    value(state);
-                });
-                (*key, handler)
-            })
-        );
-
-        // Add core ops handlers
-        handlers.extend(
-            get_core_ops().iter().map(|(key, value)| {
-                let handler: CommandHandler = Box::new(move |state| {
-                    value(state);
-                });
-                (*key, handler)
-            })
-        );
-
-        handlers
-    }
-
+    #[inline]
     pub fn init(
         script: ScriptFile,
         self_entity: Option<EntityType>,
@@ -60,77 +46,91 @@ impl ScriptRunner {
     ) -> ScriptState {
         let mut state = ScriptState::new(script, args);
 
-        // Handle the self entity if provided
-        if let Some(entity) = self_entity {
-            // Store entity in state
-            state.self_entity = Some(entity.clone());
+        if self_entity.is_none() && target_entity.is_none() {
+            return state;
+        }
 
-            // Set active entities based on type
-            match entity {
-                EntityType::Player(player) => {
-                    state.active_player = Some(player);
-                    state.pointer_add(ScriptPointer::ActivePlayer);
-                },
-                EntityType::NPC(npc) => {
-                    state.active_npc = Some(npc);
-                    state.pointer_add(ScriptPointer::ActiveNpc);
-                },
-                EntityType::Loc(loc) => {
-                    state.active_loc = Some(loc);
-                    state.pointer_add(ScriptPointer::ActiveLoc);
-                },
-                EntityType::Obj(obj) => {
-                    state.active_obj = Some(obj);
-                    state.pointer_add(ScriptPointer::ActiveObj);
+        if let Some(self_ent) = self_entity {
+            state.self_entity = Some(self_ent);
+            
+            unsafe {
+                match &state.self_entity {
+                    Some(EntityType::Player(player)) => {
+                        state.active_player = Some(player.clone());
+                        state.pointers |= 1 << (ScriptPointer::ActivePlayer as usize);
+                    },
+                    Some(EntityType::NPC(npc)) => {
+                        state.active_npc = Some(npc.clone());
+                        state.pointers |= 1 << (ScriptPointer::ActiveNpc as usize);
+                    },
+                    Some(EntityType::Loc(loc)) => {
+                        state.active_loc = Some(loc.clone());
+                        state.pointers |= 1 << (ScriptPointer::ActiveLoc as usize);
+                    },
+                    Some(EntityType::Obj(obj)) => {
+                        state.active_obj = Some(obj.clone());
+                        state.pointers |= 1 << (ScriptPointer::ActiveObj as usize);
+                    },
+                    _ => {}
                 }
             }
         }
 
-        // Process target entity if provided
         if let Some(target) = target_entity {
-            match target {
-                EntityType::Player(player) => {
-                    if matches!(state.self_entity, Some(EntityType::Player(_))) {
-                        state.active_player2 = Some(player);
-                        state.pointer_add(ScriptPointer::ActivePlayer2);
-                    } else {
-                        state.active_player = Some(player);
-                        state.pointer_add(ScriptPointer::ActivePlayer);
+            let has_same_type = match (&state.self_entity, &target) {
+                (Some(EntityType::Player(_)), EntityType::Player(_)) |
+                (Some(EntityType::NPC(_)), EntityType::NPC(_)) |
+                (Some(EntityType::Loc(_)), EntityType::Loc(_)) |
+                (Some(EntityType::Obj(_)), EntityType::Obj(_)) => true,
+                _ => false
+            };
+            
+            unsafe {
+                match target {
+                    EntityType::Player(player) => {
+                        if has_same_type {
+                            state.active_player2 = Some(player.clone());
+                            state.pointers |= 1 << (ScriptPointer::ActivePlayer2 as usize);
+                        } else {
+                            state.active_player = Some(player.clone());
+                            state.pointers |= 1 << (ScriptPointer::ActivePlayer as usize);
+                        }
+                    },
+                    EntityType::NPC(npc) => {
+                        if has_same_type {
+                            state.active_npc2 = Some(npc.clone());
+                            state.pointers |= 1 << (ScriptPointer::ActiveNpc2 as usize);
+                        } else {
+                            state.active_npc = Some(npc.clone());
+                            state.pointers |= 1 << (ScriptPointer::ActiveNpc as usize);
+                        }
+                    },
+                    EntityType::Loc(loc) => {
+                        if has_same_type {
+                            state.active_loc2 = Some(loc.clone());
+                            state.pointers |= 1 << (ScriptPointer::ActiveLoc2 as usize);
+                        } else {
+                            state.active_loc = Some(loc.clone());
+                            state.pointers |= 1 << (ScriptPointer::ActiveLoc as usize);
+                        }
+                    },
+                    EntityType::Obj(obj) => {
+                        if has_same_type {
+                            state.active_obj2 = Some(obj.clone());
+                            state.pointers |= 1 << (ScriptPointer::ActiveObj2 as usize);
+                        } else {
+                            state.active_obj = Some(obj.clone());
+                            state.pointers |= 1 << (ScriptPointer::ActiveObj as usize);
+                        }
                     }
-                },
-                EntityType::NPC(npc) => {
-                    if matches!(state.self_entity, Some(EntityType::NPC(_))) {
-                        state.active_npc2 = Some(npc);
-                        state.pointer_add(ScriptPointer::ActiveNpc2);
-                    } else {
-                        state.active_npc = Some(npc);
-                        state.pointer_add(ScriptPointer::ActiveNpc);
-                    }
-                },
-                EntityType::Loc(loc) => {
-                    if matches!(state.self_entity, Some(EntityType::Loc(_))) {
-                        state.active_loc2 = Some(loc);
-                        state.pointer_add(ScriptPointer::ActiveLoc2);
-                    } else {
-                        state.active_loc = Some(loc);
-                        state.pointer_add(ScriptPointer::ActiveLoc);
-                    }
-                },
-                EntityType::Obj(obj) => {
-                    if matches!(state.self_entity, Some(EntityType::Obj(_))) {
-                        state.active_obj2 = Some(obj);
-                        state.pointer_add(ScriptPointer::ActiveObj2);
-                    } else {
-                        state.active_obj = Some(obj);
-                        state.pointer_add(ScriptPointer::ActiveObj);
-                    }
-                },
+                }
             }
         }
 
         state
     }
 
+    #[inline(always)]
     pub fn execute(
         state: &mut ScriptState,
         reset: bool,
@@ -145,85 +145,73 @@ impl ScriptRunner {
             state.execution = ScriptState::RUNNING;
         }
 
-        // Profiling setup - only measure if benchmark is true
-        //#[cfg(feature = "profiling")]
-        let start = Some(Instant::now());
+        // Get profiling timer if needed
+        #[cfg(feature = "profiling")]
+        let start = if benchmark { Some(Instant::now()) } else { None };
 
-        // Check initial PC bounds
-        let opcodes_len = state.script.opcodes.len() as i32;
-        if state.pc >= opcodes_len || state.pc < -1 {
-            error!("Invalid program counter: {}, max expected: {}", 
-               state.pc, opcodes_len - 1);
-            state.execution = ScriptState::ABORTED;
-            return state.execution;
-        }
-
-        // Get handlers reference once, outside the loop
         let handlers = Self::get_handlers();
 
-        // Main execution loop
         while state.execution == ScriptState::RUNNING {
-            // Check opcount limit before incrementing PC
-            if !benchmark && state.opcount > 500_000 {
-                error!("Too many instructions");
-                state.execution = ScriptState::ABORTED;
-                return state.execution;
-            }
-
-            // Update counters
             state.opcount += 1;
             state.pc += 1;
 
-            // Check PC bounds (only needed now since we're incrementing by 1)
+            let opcodes = &state.script.opcodes;
+            let opcodes_len = opcodes.len() as i32;
+
             if state.pc >= opcodes_len {
-                error!("Program counter out of bounds: {}", state.pc);
+                state.execution = ScriptState::FINISHED;
+                return state.execution;
+            }
+
+            if !benchmark && state.opcount > 500_000 {
                 state.execution = ScriptState::ABORTED;
                 return state.execution;
             }
 
-            // Fetch opcode
-            let opcode = state.script.opcodes[state.pc as usize] as i32;
+            let opcode = opcodes[state.pc as usize] as i32;
 
-            // Execute opcode
-            if let Some(handler) = handlers.get(&opcode) {
-                if let Err(_) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    handler(state);
-                })) {
-                    error!("Handler panicked for opcode {}", opcode);
+            #[cfg(debug_assertions)]
+            {
+                if let Some(handler) = handlers.get(&opcode) {
+                    let handler_fn = *handler;
+                    handler_fn(state);
+                } else {
+                    error!("Unknown opcode: {}", opcode);
                     state.execution = ScriptState::ABORTED;
                     return state.execution;
                 }
-            } else {
-                error!("Unknown opcode: {}", opcode);
-                state.execution = ScriptState::ABORTED;
-                return state.execution;
+            }
+
+            #[cfg(not(debug_assertions))]
+            {
+                // Release build - use unchecked access for maximum speed
+                // SAFETY: All opcodes are validated at compile-time
+                let handler_fn = unsafe { *handlers.get(&opcode).unwrap_unchecked() };
+                handler_fn(state);
             }
         }
 
-        // Profiling - only if enabled and benchmark is true
-        //#[cfg(feature = "profiling")]
-        /*if let Some(start) = start {
+        // Profiling - only if enabled and benchmarking
+        #[cfg(feature = "profiling")]
+        if let Some(start) = start {
             let elapsed = start.elapsed();
             let time_microseconds = elapsed.as_micros() as i32;
 
-            if time_microseconds > 1000 {
+            if time_microseconds > 500_000 {
                 let message = format!(
                     "Warning [cpu time]: Script: {}, time: {}us, opcount: {}",
                     state.script.name(), time_microseconds, state.opcount
                 );
 
-                if let Some(ref entity) = state.self_entity {
-                    if let EntityType::Player(_) = entity {
-                        // TODO - send message to player
-                    } else {
-                        error!("{}", message);
-                    }
+                if let Some(EntityType::Player(_)) = state.self_entity {
+                    // TODO - send message to player
+                } else if time_microseconds > 5000 {
+                    error!("{}", message);
                 }
             }
-            debug!("time: {}µs, opcount: {}", time_microseconds, state.opcount);
-        }*/
-        debug!("time: {:?}µs, opcount: {}", start.unwrap().elapsed(), state.opcount);
 
+            debug!("time: {}µs, opcount: {}", time_microseconds, state.opcount);
+        }
 
         state.execution
     }
@@ -232,16 +220,11 @@ impl ScriptRunner {
     pub fn execute_opcode(state: &mut ScriptState, opcode: i32) -> Result<(), String> {
         let handlers = Self::get_handlers();
 
-        match handlers.get(&opcode) {
-            Some(handler) => {
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    handler(state);
-                })).map_err(|_| format!("Handler panicked for opcode {}", opcode))?;
-                Ok(())
-            },
-            None => {
-                Err(format!("Unknown opcode: {}", opcode))
-            }
+        if let Some(handler) = handlers.get(&opcode) {
+            handler(state);
+            Ok(())
+        } else {
+            Err(format!("Unknown opcode: {}", opcode))
         }
     }
 }

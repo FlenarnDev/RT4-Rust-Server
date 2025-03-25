@@ -16,7 +16,7 @@ use crate::entity::player_type::PlayerType;
 use crate::game_connection::GameClient;
 use crate::io::client::protocol::client_protocol::BY_ID;
 use crate::io::client::protocol::client_protocol_category::ClientProtocolCategory;
-use crate::io::client::protocol::client_protocol_repository::{get_decoder, get_handler, MessageDecoderErasure};
+use crate::io::client::protocol::client_protocol_repository::{get_decoder, get_handler};
 use crate::io::server::model::if_opensub::If_OpenSub;
 use crate::io::server::model::if_opentop::If_OpenTop;
 use crate::io::server::model::rebuild_normal::RebuildNormal;
@@ -313,7 +313,6 @@ impl Player {
             if let Some(packet_type) = &BY_ID.get(self.client.opcode as usize).cloned().flatten() {
                 self.client.waiting = packet_type.length;
             } else {
-                // Avoid string formatting in hot path
                 if cfg!(debug_assertions) {
                     debug!("Unknown packet type: {}", self.client.opcode);
                 }
@@ -331,7 +330,7 @@ impl Player {
             self.client.waiting = self.client.inbound.g2() as i32;
 
             // Avoid processing potentially malicious packets
-            if self.client.waiting > 1600 {
+            if self.client.waiting > 20000 {
                 self.client.shutdown();
                 return false;
             }
@@ -359,7 +358,6 @@ impl Player {
             let waiting_size = self.client.waiting as usize;
             let message = decoder.decode_erased(self.client.inbound(), waiting_size);
 
-            // Handle the message
             let success = if let Some(handler) = get_handler(&packet_type) {
                 handler.handle_erased(&*message, self)
             } else {
@@ -369,7 +367,6 @@ impl Player {
                 false
             };
 
-            // Update limits based on message category
             if success {
                 match message.category() {
                     ClientProtocolCategory::USER_EVENT => self.user_limit += 1,
@@ -424,21 +421,16 @@ impl Player {
         // Create and send top interface message
         self.write(If_OpenTop::new(window_id, false, verify_id));
 
-        // Increment and reuse verification ID
         verify_id = self.get_incremented_verify_id();
         self.write(If_OpenSub::new(window_id, 100, 662, 1, verify_id));
 
-        // Handle login trigger script
         if let Some(trigger) = ScriptProvider::get_by_trigger_specific(ServerTriggerTypes::LOGIN, -1, -1) {
-            // Create script state once
             let script = ScriptRunner::init(trigger, Some(self.clone().as_entity_type()), None, None);
             self.execute_script(script, Some(true), None);
         }
 
-        // Activate player
         self.set_active(true);
 
-        // Only log timing in debug mode
         if cfg!(debug_assertions) {
             debug!("Processed on login in: {:?}", start.elapsed());
         }
@@ -458,11 +450,9 @@ impl Player {
     }
 
     fn rebuild_normal(&mut self, reconnect: bool) {
-        // Get origin coordinates once
         let origin_x = CoordGrid::zone(self.get_origin_coord().x()) as i16;
         let origin_z = CoordGrid::zone(self.get_origin_coord().z()) as i16;
 
-        // Pre-calculate zone boundaries
         let reload_left_x = (origin_x - 4) << 3;
         let reload_right_x = (origin_x + 5) << 3;
         let reload_top_z = (origin_z + 5) << 3;
@@ -488,7 +478,6 @@ impl Player {
                 self.get_coord().local_z()
             );
 
-            // Write the message directly
             self.write(rebuild_msg);
 
             // Update origin coordinate
@@ -551,7 +540,6 @@ impl Player {
 
         // TODO - modal refresh!
 
-        // Take ownership of the messages to avoid cloning
         let mut messages = std::mem::take(&mut self.outgoing_messages);
 
         // Process all messages
@@ -571,10 +559,8 @@ impl Player {
         }
 
         if message.priority() == ServerProtocolPriority::IMMEDIATE {
-            // For immediate messages, write directly without enum conversion
             message.write_self(self);
         } else {
-            // Only convert to enum for queued messages
             self.outgoing_messages.push(message.into());
         }
     }

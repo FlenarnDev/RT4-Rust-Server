@@ -41,7 +41,7 @@ pub struct ScriptState {
     pub ssp: usize,
     pub int_locals: Vec<i32>,
     pub string_locals: Vec<String>,
-    pointers: i32,
+    pub pointers: i32,
     pub self_entity: Option<EntityType>,
     pub active_player: Option<Player>,
     pub active_player2: Option<Player>,
