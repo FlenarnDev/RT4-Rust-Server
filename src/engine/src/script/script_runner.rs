@@ -1,5 +1,5 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
+use std::sync::OnceLock;
 use std::time::Instant;
 use log::{debug, error};
 use crate::entity::entity_queue_request::ScriptArgument;
@@ -11,7 +11,7 @@ use crate::script::script_pointer::ScriptPointer;
 use crate::script::script_state::ScriptState;
 
 /// Function type for handling script commands
-pub type CommandHandler = Box<dyn Fn(&mut ScriptState)>;
+pub type CommandHandler = Box<dyn Fn(&mut ScriptState) + Send + Sync + 'static>;
 
 /// Map of opcode numbers to their handler functions.
 pub type CommandHandlers = HashMap<i32, CommandHandler>;
@@ -20,51 +20,34 @@ pub struct ScriptRunner;
 
 impl ScriptRunner {
     pub fn get_handlers() -> &'static CommandHandlers {
-        // Define a thread-local for storing handlers
-        thread_local! {
-            static HANDLERS: RefCell<Option<Box<CommandHandlers>>> = RefCell::new(None);
-        }
+        static HANDLERS: OnceLock<CommandHandlers> = OnceLock::new();
 
-        // This is a static reference that will be created during the first call
-        static mut STATIC_REF: Option<&'static CommandHandlers> = None;
-
-        unsafe {
-            if STATIC_REF.is_none() {
-                // We haven't initialized yet, do it now
-                let thread_handlers = Box::new(Self::create_handlers());
-
-                // We need a reference that outlives the function
-                // This is unsafe but necessary for this pattern
-                let leaked_handlers: &'static CommandHandlers = Box::leak(thread_handlers);
-
-                // Store the static reference
-                STATIC_REF = Some(leaked_handlers);
-            }
-
-            STATIC_REF.unwrap()
-        }
+        HANDLERS.get_or_init(|| Self::create_handlers())
     }
 
     // Helper to create and populate a new handlers map
     fn create_handlers() -> CommandHandlers {
-        let mut handlers = CommandHandlers::new();
+        let mut handlers = CommandHandlers::with_capacity(256); // Pre-allocate reasonable capacity
 
-        // Create a new boxed function for each handler from player_ops
-        for (key, value) in get_player_ops().iter() {
-            let cloned_handler: CommandHandler = Box::new(move |state| {
-                (*value)(state);
-            });
+        // Add player ops handlers
+        handlers.extend(
+            get_player_ops().iter().map(|(key, value)| {
+                let handler: CommandHandler = Box::new(move |state| {
+                    value(state);
+                });
+                (*key, handler)
+            })
+        );
 
-            handlers.insert(*key, cloned_handler);
-        }
-
-        for (key, value) in get_core_ops().iter() {
-            let cloned_handler: CommandHandler = Box::new(move |state| {
-                (*value)(state);
-            });
-
-            handlers.insert(*key, cloned_handler);
-        }
+        // Add core ops handlers
+        handlers.extend(
+            get_core_ops().iter().map(|(key, value)| {
+                let handler: CommandHandler = Box::new(move |state| {
+                    value(state);
+                });
+                (*key, handler)
+            })
+        );
 
         handlers
     }
@@ -105,9 +88,8 @@ impl ScriptRunner {
 
         // Process target entity if provided
         if let Some(target) = target_entity {
-            match (&state.self_entity, target) {
-                // Player target
-                (_, EntityType::Player(player)) => {
+            match target {
+                EntityType::Player(player) => {
                     if matches!(state.self_entity, Some(EntityType::Player(_))) {
                         state.active_player2 = Some(player);
                         state.pointer_add(ScriptPointer::ActivePlayer2);
@@ -116,9 +98,7 @@ impl ScriptRunner {
                         state.pointer_add(ScriptPointer::ActivePlayer);
                     }
                 },
-
-                // NPC target
-                (_, EntityType::NPC(npc)) => {
+                EntityType::NPC(npc) => {
                     if matches!(state.self_entity, Some(EntityType::NPC(_))) {
                         state.active_npc2 = Some(npc);
                         state.pointer_add(ScriptPointer::ActiveNpc2);
@@ -127,9 +107,7 @@ impl ScriptRunner {
                         state.pointer_add(ScriptPointer::ActiveNpc);
                     }
                 },
-
-                // Location target
-                (_, EntityType::Loc(loc)) => {
+                EntityType::Loc(loc) => {
                     if matches!(state.self_entity, Some(EntityType::Loc(_))) {
                         state.active_loc2 = Some(loc);
                         state.pointer_add(ScriptPointer::ActiveLoc2);
@@ -138,9 +116,7 @@ impl ScriptRunner {
                         state.pointer_add(ScriptPointer::ActiveLoc);
                     }
                 },
-
-                // Object target
-                (_, EntityType::Obj(obj)) => {
+                EntityType::Obj(obj) => {
                     if matches!(state.self_entity, Some(EntityType::Obj(_))) {
                         state.active_obj2 = Some(obj);
                         state.pointer_add(ScriptPointer::ActiveObj2);
@@ -169,21 +145,21 @@ impl ScriptRunner {
             state.execution = ScriptState::RUNNING;
         }
 
-        // Profiling setup - only measure if needed
-        #[cfg(feature = "profiling")]
-        let start = Instant::now();
+        // Profiling setup - only measure if benchmark is true
+        //#[cfg(feature = "profiling")]
+        let start = Some(Instant::now());
 
         // Check initial PC bounds
-        if state.pc >= state.script.opcodes.len() as i32 || state.pc < -1 {
+        let opcodes_len = state.script.opcodes.len() as i32;
+        if state.pc >= opcodes_len || state.pc < -1 {
             error!("Invalid program counter: {}, max expected: {}", 
-               state.pc, state.script.opcodes.len());
+               state.pc, opcodes_len - 1);
             state.execution = ScriptState::ABORTED;
             return state.execution;
         }
 
         // Get handlers reference once, outside the loop
         let handlers = Self::get_handlers();
-        let opcodes_len = state.script.opcodes.len() as i32;
 
         // Main execution loop
         while state.execution == ScriptState::RUNNING {
@@ -205,8 +181,8 @@ impl ScriptRunner {
                 return state.execution;
             }
 
-            // Fetch and execute opcode
-            let opcode = state.script.opcodes[state.pc as usize] as i32; // Convert once
+            // Fetch opcode
+            let opcode = state.script.opcodes[state.pc as usize] as i32;
 
             // Execute opcode
             if let Some(handler) = handlers.get(&opcode) {
@@ -224,9 +200,9 @@ impl ScriptRunner {
             }
         }
 
-        // Profiling - only if enabled
-        #[cfg(feature = "profiling")]
-        {
+        // Profiling - only if enabled and benchmark is true
+        //#[cfg(feature = "profiling")]
+        /*if let Some(start) = start {
             let elapsed = start.elapsed();
             let time_microseconds = elapsed.as_micros() as i32;
 
@@ -245,12 +221,15 @@ impl ScriptRunner {
                 }
             }
             debug!("time: {}µs, opcount: {}", time_microseconds, state.opcount);
-        }
+        }*/
+        debug!("time: {:?}µs, opcount: {}", start.unwrap().elapsed(), state.opcount);
+
 
         state.execution
     }
 
-    fn execute_inner(state: &mut ScriptState, opcode: i32) -> Result<(), String> {
+    #[inline]
+    pub fn execute_opcode(state: &mut ScriptState, opcode: i32) -> Result<(), String> {
         let handlers = Self::get_handlers();
 
         match handlers.get(&opcode) {
