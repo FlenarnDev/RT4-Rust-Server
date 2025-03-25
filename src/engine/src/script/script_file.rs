@@ -144,8 +144,6 @@ impl ScriptFile {
         script.info.script_name = packet.gjstr(0);
         script.info.source_file_path = packet.gjstr(0);
         script.info.lookup_key = packet.g4();
-        debug!("script info name: {:?}", script.info.script_name);
-        debug!("source path: {:?}", script.info.source_file_path);
         
         let parameter_type_count = packet.g1();
         for _i in 0..parameter_type_count {
@@ -161,12 +159,9 @@ impl ScriptFile {
         let mut instruction = 0;
         while trailer_position > packet.position {
             let opcode = packet.g2();
-            debug!("opcode: {:?}", opcode);
-            debug!("remaining: {:?}", packet.remaining());
             
             if opcode == ScriptOpcode::PUSH_CONSTANT_STRING as u16 {
                 let test = packet.gjstr(0);
-                debug!("test: {:?}", test);
                 script.string_operands.push(test);
             } else if is_large_operand(opcode as i32) {
                 script.int_operands.push(packet.g4());

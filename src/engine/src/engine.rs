@@ -196,7 +196,7 @@ impl Engine {
             
             // Cycle the world now
             self.current_tick += 1;
-            
+
             sleep(self.tick_rate.saturating_sub(start.elapsed()));
         }
     }

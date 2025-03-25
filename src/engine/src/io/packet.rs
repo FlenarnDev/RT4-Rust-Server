@@ -470,20 +470,20 @@ impl Packet {
     /// Reads a string from the internal buffer until a terminator byte is encountered.
     #[inline(always)]
     pub fn gjstr(&mut self, terminator: u8) -> String {
-        let mut result = String::new();
+        if let Some(end) = self.data[self.position..].iter().position(|&b| b == terminator) {
+            let slice = &self.data[self.position..self.position + end];
+            self.position += end + 1;
 
-        while self.position < self.data.len() {
-            let b = self.data[self.position];
-            self.position += 1;
+            // SAFETY: we're assuming the bytes up to the terminator are valid UTF-8
+            unsafe { String::from_utf8_unchecked(slice.to_vec()) }
+        } else {
+            // No terminator found, consume rest
+            let slice = &self.data[self.position..];
+            self.position = self.data.len();
 
-            if b == terminator {
-                break;
-            }
-
-            result.push(b as char);
+            // SAFETY: same assumption
+            unsafe { String::from_utf8_unchecked(slice.to_vec()) }
         }
-
-        result
     }
 
     #[inline(always)]
