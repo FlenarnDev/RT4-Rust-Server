@@ -21,6 +21,8 @@ pub struct GameClient {
     /// Bytes to wait for (if any)
     pub waiting: i32,
     read_buffer: Vec<u8>,
+    // Track nonblocking state to avoid toggling
+    nonblocking: bool,
 }
 
 impl Clone for GameClient {
@@ -38,6 +40,7 @@ impl Clone for GameClient {
             opcode: self.opcode,
             waiting: self.waiting,
             read_buffer: self.read_buffer.clone(),
+            nonblocking: false,
         }
     }
 }
@@ -64,7 +67,7 @@ impl GameClient {
         Self {
             stream: Some(stream),
             inbound: Packet::new(BUFFER_SIZE),
-            outbound: Packet::new(1),
+            outbound: Packet::new(BUFFER_SIZE), // Increase initial size from 1 to BUFFER_SIZE
             state: ConnectionState::New,
             total_bytes_read: 0,
             total_bytes_written: 0,
@@ -73,6 +76,7 @@ impl GameClient {
             opcode: 0,
             waiting: 0,
             read_buffer: vec![0u8; BUFFER_SIZE],
+            nonblocking: false,
         }
     }
 
@@ -89,21 +93,38 @@ impl GameClient {
             opcode: 0,
             waiting: 0,
             read_buffer: Vec::with_capacity(1),
+            nonblocking: false,
         }
     }
 
     /// Read data from stream into inbound packet.
+    #[inline]
     pub fn read_packet(&mut self) -> Result<usize, std::io::Error> {
         if self.stream.is_none() {
             return Err(std::io::Error::new(ErrorKind::NotConnected, "No connection"));
         }
 
         self.inbound.position = 0;
+
+        // Directly read into the buffer
         let bytes_read = self.stream.as_mut().unwrap().read(&mut self.read_buffer)?;
 
         if bytes_read > 0 {
+            // Clear existing data and ensure capacity
             self.inbound.data.clear();
-            self.inbound.data.extend_from_slice(&self.read_buffer[0..bytes_read]);
+            self.inbound.data.reserve(bytes_read);
+
+            // Use unsafe for performance in critical section
+            unsafe {
+                // Set length to match read bytes and copy directly
+                self.inbound.data.set_len(bytes_read);
+                std::ptr::copy_nonoverlapping(
+                    self.read_buffer.as_ptr(),
+                    self.inbound.data.as_mut_ptr(),
+                    bytes_read
+                );
+            }
+
             self.total_bytes_read += bytes_read;
         }
 
@@ -111,6 +132,7 @@ impl GameClient {
     }
 
     /// Read data with specified size from stream into inbound packet.
+    #[inline]
     pub fn read_packet_with_size(&mut self, size: usize) -> Result<usize, std::io::Error> {
         if self.stream.is_none() {
             return Err(std::io::Error::new(ErrorKind::NotConnected, "No connection"));
@@ -118,44 +140,95 @@ impl GameClient {
 
         self.inbound.position = 0;
 
+        // Ensure buffer is large enough
         if self.read_buffer.len() < size {
             self.read_buffer.resize(size, 0);
         }
 
-        let bytes_read = self.stream.as_mut().unwrap().read(&mut self.read_buffer[0..size])?;
+        // Read exact number of bytes if possible
+        match self.stream.as_mut().unwrap().read_exact(&mut self.read_buffer[0..size]) {
+            Ok(_) => {
+                // Clear and ensure capacity for inbound data
+                self.inbound.data.clear();
+                self.inbound.data.reserve(size);
 
-        if bytes_read > 0 {
-            self.inbound.data.clear();
-            self.inbound.data.extend_from_slice(&self.read_buffer[0..bytes_read]);
-            self.total_bytes_read += bytes_read;
+                // Use unsafe for performance in critical section
+                unsafe {
+                    // Set length to match size and copy directly
+                    self.inbound.data.set_len(size);
+                    std::ptr::copy_nonoverlapping(
+                        self.read_buffer.as_ptr(),
+                        self.inbound.data.as_mut_ptr(),
+                        size
+                    );
+                }
+
+                self.total_bytes_read += size;
+                Ok(size)
+            },
+            Err(e) => {
+                // Handle partial reads
+                if e.kind() == ErrorKind::UnexpectedEof {
+                    // Try a normal read for whatever bytes are available
+                    let bytes_read = self.stream.as_mut().unwrap().read(&mut self.read_buffer[0..size])?;
+
+                    if bytes_read > 0 {
+                        self.inbound.data.clear();
+                        self.inbound.data.reserve(bytes_read);
+
+                        unsafe {
+                            self.inbound.data.set_len(bytes_read);
+                            std::ptr::copy_nonoverlapping(
+                                self.read_buffer.as_ptr(),
+                                self.inbound.data.as_mut_ptr(),
+                                bytes_read
+                            );
+                        }
+
+                        self.total_bytes_read += bytes_read;
+                    }
+
+                    Ok(bytes_read)
+                } else {
+                    Err(e)
+                }
+            }
         }
-
-        Ok(bytes_read)
     }
 
     /// Write data from outbound [Packet] to stream
+    #[inline]
     pub fn write_packet(&mut self) -> Result<usize, std::io::Error> {
         if self.stream.is_none() {
             return Err(std::io::Error::new(ErrorKind::NotConnected, "No connection"));
         }
 
-        let bytes_written = self.stream.as_mut().unwrap().write(&self.outbound.data[0..self.outbound.position])?;
+        // Skip if nothing to write
+        if self.outbound.position == 0 {
+            return Ok(0);
+        }
+
+        // Use write_all for more reliable writing
+        let bytes_to_write = self.outbound.position;
+        self.stream.as_mut().unwrap().write_all(&self.outbound.data[0..bytes_to_write])?;
         self.stream.as_mut().unwrap().flush()?;
 
-        // Reset outbound packet for next use
+        // Reset outbound packet for next use but maintain capacity
         self.outbound.position = 0;
         self.outbound.data.clear();
-        self.total_bytes_written += bytes_written;
+        self.total_bytes_written += bytes_to_write;
 
-        Ok(bytes_written)
+        Ok(bytes_to_write)
     }
 
     /// Get a reference to the inbound packet (for reading received data)
+    #[inline]
     pub fn inbound(&mut self) -> &mut Packet {
         &mut self.inbound
     }
 
     /// Get a reference to the outbound packet (for preparing data to send)
+    #[inline]
     pub fn outbound(&mut self) -> &mut Packet {
         &mut self.outbound
     }
@@ -174,14 +247,21 @@ impl GameClient {
         self.stream = None;
     }
 
+    #[inline]
     pub fn is_connection_active(&self) -> bool {
         match &self.stream {
             None => false,
             Some(stream) => {
                 let mut buf = [0; 1];
 
-                // Try to set non-blocking temporarily
-                let was_nonblocking = stream.set_nonblocking(true).is_ok();
+                // Only toggle nonblocking if needed
+                let need_toggle = !self.nonblocking;
+                let mut was_toggled = false;
+
+                // Set nonblocking temporarily if needed
+                if need_toggle {
+                    was_toggled = stream.set_nonblocking(true).is_ok();
+                }
 
                 let result = match stream.peek(&mut buf) {
                     Ok(0) => false, // Connection closed (EOF)
@@ -198,7 +278,7 @@ impl GameClient {
                 };
 
                 // Restore original blocking mode if needed
-                if was_nonblocking {
+                if need_toggle && was_toggled {
                     let _ = stream.set_nonblocking(false);
                 }
 
@@ -208,45 +288,68 @@ impl GameClient {
     }
 
     // Take ownership of a connection
+    #[inline]
     pub fn take_ownership(connection: &mut Option<GameClient>) -> GameClient {
         connection.take().unwrap_or_else(|| GameClient::new_dummy())
     }
 
     // Optimized method to take just the stream from a connection
+    #[inline]
     pub fn take_stream(&mut self) -> Option<TcpStream> {
         self.stream.take()
     }
 
     // Add a stream to a dummy connection
+    #[inline]
     pub fn with_stream(mut self, stream: TcpStream) -> Self {
         self.stream = Some(stream);
         self.state = ConnectionState::New;
         self
     }
 
+    #[inline]
     pub fn has_available(&mut self, required_bytes: usize) -> Result<bool, std::io::Error> {
         if self.stream.is_none() {
             return Err(std::io::Error::new(ErrorKind::NotConnected, "No connection"));
         }
 
-        // Save current blocking state
+        // Cache stream reference
         let stream = self.stream.as_ref().unwrap();
-        let was_nonblocking = match stream.set_nonblocking(true) {
-            Ok(_) => false,
-            Err(_) => true, // It was already nonblocking
+
+        // Only toggle nonblocking if needed (caching state)
+        let was_nonblocking;
+        if !self.nonblocking {
+            was_nonblocking = false;
+            match stream.set_nonblocking(true) {
+                Ok(_) => (),
+                Err(_) => return Err(std::io::Error::new(ErrorKind::Other, "Failed to set nonblocking")),
+            }
+        } else {
+            was_nonblocking = true;
+        }
+
+        // Use a stack-allocated buffer for small peek requests
+        let mut stack_buf = [0u8; 16];
+        let peek_result = if required_bytes <= stack_buf.len() {
+            // Use stack buffer for small requests
+            stream.peek(&mut stack_buf[0..required_bytes])
+        } else {
+            // For larger requests, ensure our read buffer is large enough
+            if self.read_buffer.len() < required_bytes {
+                self.read_buffer.resize(required_bytes, 0);
+            }
+            stream.peek(&mut self.read_buffer[0..required_bytes])
         };
 
-        // Create a buffer just large enough for our needs
-        let mut peek_buf = vec![0u8; required_bytes];
-
-        // Peek to see if we have enough bytes
-        let result = match self.stream.as_ref().unwrap().peek(&mut peek_buf) {
+        // Process the peek result
+        let result = match peek_result {
             Ok(n) => n >= required_bytes, // Return true if we have enough bytes
             Err(e) if e.kind() == ErrorKind::WouldBlock => false, // No data available
             Err(e) => {
                 // Restore blocking state if needed
                 if !was_nonblocking {
-                    let _ = self.stream.as_ref().unwrap().set_nonblocking(false);
+                    let _ = stream.set_nonblocking(false);
+                    self.nonblocking = false;
                 }
                 return Err(e);
             }
@@ -254,9 +357,79 @@ impl GameClient {
 
         // Restore blocking state if needed
         if !was_nonblocking {
-            let _ = self.stream.as_ref().unwrap().set_nonblocking(false);
+            let _ = stream.set_nonblocking(false);
+            self.nonblocking = false;
         }
 
         Ok(result)
+    }
+
+    // Method to toggle and maintain nonblocking state
+    pub fn set_nonblocking(&mut self, nonblocking: bool) -> Result<(), std::io::Error> {
+        if self.stream.is_none() {
+            return Err(std::io::Error::new(ErrorKind::NotConnected, "No connection"));
+        }
+
+        // Only change if state is different
+        if self.nonblocking != nonblocking {
+            self.stream.as_ref().unwrap().set_nonblocking(nonblocking)?;
+            self.nonblocking = nonblocking;
+        }
+
+        Ok(())
+    }
+
+    // Batch write multiple buffers to reduce system calls
+    pub fn write_multiple(&mut self, buffers: &[&[u8]]) -> Result<usize, std::io::Error> {
+        if self.stream.is_none() {
+            return Err(std::io::Error::new(ErrorKind::NotConnected, "No connection"));
+        }
+
+        let mut total_written = 0;
+
+        // Combine small buffers into a single write
+        for buffer in buffers {
+            // Add to outbound buffer
+            let start_pos = self.outbound.position;
+            let buffer_len = buffer.len();
+            let end_pos = start_pos + buffer_len;
+
+            // Ensure capacity
+            if end_pos > self.outbound.data.len() {
+                self.outbound.data.resize(end_pos, 0);
+            }
+
+            // Copy buffer
+            self.outbound.data[start_pos..end_pos].copy_from_slice(buffer);
+            self.outbound.position = end_pos;
+
+            total_written += buffer_len;
+        }
+
+        // Write combined data
+        self.write_packet()?;
+
+        Ok(total_written)
+    }
+
+    // Directly write a buffer without copying to outbound first (for large buffers)
+    pub fn write_direct(&mut self, buffer: &[u8]) -> Result<usize, std::io::Error> {
+        if self.stream.is_none() {
+            return Err(std::io::Error::new(ErrorKind::NotConnected, "No connection"));
+        }
+
+        // For large buffers, bypass the outbound packet
+        if buffer.len() > BUFFER_SIZE {
+            let bytes_written = self.stream.as_mut().unwrap().write(buffer)?;
+            self.total_bytes_written += bytes_written;
+            return Ok(bytes_written);
+        }
+
+        // For smaller buffers, use normal path
+        self.outbound.data.clear();
+        self.outbound.data.extend_from_slice(buffer);
+        self.outbound.position = buffer.len();
+
+        self.write_packet()
     }
 }
