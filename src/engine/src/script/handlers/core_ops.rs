@@ -3,22 +3,9 @@ use crate::script::script_runner::CommandHandlers;
 use crate::script::script_state::ScriptState;
 use std::collections::HashMap;
 use std::sync::OnceLock;
-
-
-#[inline(always)]
-fn handle_push_constant_string(state: &mut ScriptState) {
-    let string_operand = state.get_string_operand();
-    state.push_string(string_operand.parse().unwrap());
-}
-
-#[inline(always)]
-fn handle_return(state: &mut ScriptState) {
-    if state.fp == 0 {
-        state.execution = ScriptState::FINISHED;
-        return;
-    }
-    state.pop_frame();
-}
+use log::error;
+use crate::script::script_file::ScriptFile;
+use crate::script::script_provider::ScriptProvider;
 
 pub fn get_core_ops() -> &'static CommandHandlers {
     static HANDLERS: OnceLock<CommandHandlers> = OnceLock::new();
@@ -27,14 +14,216 @@ pub fn get_core_ops() -> &'static CommandHandlers {
         let mut handlers: CommandHandlers = HashMap::with_capacity(64); // TODO - Update as need be.
 
         handlers.insert(
-            ScriptOpcode::PUSH_CONSTANT_STRING as i32,
-            handle_push_constant_string
+            ScriptOpcode::PUSH_CONSTANT_INT as i32,
+            |state: &mut ScriptState| {
+                state.push_int(state.get_int_operand())
+            }
         );
 
         handlers.insert(
-            ScriptOpcode::RETURN as i32,
-            handle_return
+            ScriptOpcode::PUSH_CONSTANT_STRING as i32,
+            |state: &mut ScriptState| {
+                let string_operand = state.get_string_operand();
+                state.push_string(string_operand.parse().unwrap());
+            }
         );
+
+        handlers.insert(
+            ScriptOpcode::PUSH_INT_LOCAL as i32,
+            |state: &mut ScriptState| {
+                state.push_int(state.int_locals[state.get_int_operand() as usize])
+            }
+        );
+
+        handlers.insert(
+            ScriptOpcode::POP_INT_LOCAL as i32,
+            |state: &mut ScriptState| {
+                let operand = state.get_int_operand() as usize;
+                state.int_locals[operand] = state.pop_int();
+            }
+        );
+
+        handlers.insert(
+            ScriptOpcode::PUSH_STRING_LOCAL as i32,
+            |state: &mut ScriptState| {
+                let index = state.get_int_operand() as usize;
+                let s = std::mem::replace(&mut state.string_locals[index], String::new());
+                state.push_string(s);
+            }
+        );
+        
+        handlers.insert(
+            ScriptOpcode::BRANCH as i32,
+            |state: &mut ScriptState| {
+                state.pc += state.get_int_operand();
+            }
+        );
+        
+        handlers.insert(
+            ScriptOpcode::BRANCH_NOT as i32,
+            |state: &mut ScriptState| {
+                let b = state.pop_int();
+                let a = state.pop_int();
+                
+                if a != b {
+                    state.pc += state.get_int_operand();
+                }
+            }
+        );
+        
+        handlers.insert(
+            ScriptOpcode::BRANCH_EQUALS as i32,
+            |state: &mut ScriptState| {
+                let b = state.pop_int();
+                let a = state.pop_int();
+                
+                if a == b {
+                    state.pc += state.get_int_operand();
+                }
+            }
+        );
+        
+        handlers.insert(
+            ScriptOpcode::BRANCH_LESS_THAN as i32,
+            |state: &mut ScriptState| {
+                let b = state.pop_int();
+                let a = state.pop_int();
+                
+                if a < b {
+                    state.pc += state.get_int_operand();
+                }
+            }
+        );
+        
+        handlers.insert(
+            ScriptOpcode::BRANCH_GREATER_THAN as i32,
+            |state: &mut ScriptState| {
+                let b = state.pop_int();
+                let a = state.pop_int();
+                
+                if a > b {
+                    state.pc += state.get_int_operand();
+                }
+            }
+        );
+        
+        handlers.insert(
+            ScriptOpcode::BRANCH_LESS_THAN_OR_EQUALS as i32,
+            |state: &mut ScriptState| {
+                let b = state.pop_int();
+                let a = state.pop_int();
+                
+                if a <= b {
+                    state.pc += state.get_int_operand();
+                }
+            }
+        );
+        
+        handlers.insert(
+            ScriptOpcode::BRANCH_GREATER_THAN_OR_EQUALS as i32,
+            |state: &mut ScriptState| {
+                let b = state.pop_int();
+                let a = state.pop_int();
+                
+                if a >= b {
+                    state.pc += state.get_int_operand();
+                }
+            }
+        );
+        
+        handlers.insert(
+            ScriptOpcode::POP_INT_DISCARD as i32,
+            |state: &mut ScriptState| {
+                state.isp -= 1
+            }
+        );
+        
+        handlers.insert(
+            ScriptOpcode::POP_STRING_DISCARD as i32,
+            |state: &mut ScriptState| {
+                state.ssp -= 1
+            }
+        );
+        
+        handlers.insert(
+            ScriptOpcode::RETURN as i32,
+            |state: &mut ScriptState| {
+                if state.fp == 0 {
+                    state.execution = ScriptState::FINISHED;
+                    return;
+                }
+                state.pop_frame();
+            },
+        );
+        
+        handlers.insert(
+            ScriptOpcode::JOIN_STRING as i32,
+            |state: &mut ScriptState| {
+                let count = state.get_int_operand();
+                
+                let mut strings = Vec::with_capacity(count as usize);
+                for _i in 0..count {
+                    strings.push(state.pop_string());
+                }
+                strings.reverse();
+                state.push_string(strings.join(""));
+            }
+        );
+        
+        handlers.insert(
+            ScriptOpcode::GOSUB as i32,
+            |state: &mut ScriptState| {
+                if state.fp >= 50 {
+                    error!("Stack overflow");
+                }
+                
+                let proc: Option<ScriptFile> = ScriptProvider::get(state.pop_int() as usize);
+                if let Some(proc) = proc {
+                    state.gosub_frame(proc)
+                } else {
+                    error!("Unable to find proc: {:?}", proc);
+                }
+            }
+        );
+        
+        handlers.insert(
+            ScriptOpcode::GOSUB_WITH_PARAMS as i32,
+            |state: &mut ScriptState| {
+                if state.fp >= 50 {
+                    error!("Stack overflow");
+                }
+
+                let proc: Option<ScriptFile> = ScriptProvider::get(state.get_int_operand() as usize);
+                if let Some(proc) = proc {
+                    state.gosub_frame(proc)
+                } else {
+                    error!("Unable to find proc: {:?}", proc);
+                }
+            }
+        );
+        
+        handlers.insert(
+            ScriptOpcode::JUMP as i32,
+            |state: &mut ScriptState| {
+                let label: Option<ScriptFile> = ScriptProvider::get(state.pop_int() as usize);
+                if label.is_some() {
+                    error!("Unable to find label: {:?}", label);
+                }
+                state.goto_frame(label.unwrap());
+            }
+        );
+        
+        handlers.insert(
+            ScriptOpcode::JUMP_WITH_PARAMS as i32,
+            |state: &mut ScriptState| {
+                let label: Option<ScriptFile> = ScriptProvider::get(state.get_int_operand() as usize);
+                if label.is_some() {
+                    error!("Unable to find label: {:?}", label);
+                }
+                state.goto_frame(label.unwrap());
+            }
+        );
+        
         handlers
     })
 }

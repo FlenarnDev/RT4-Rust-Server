@@ -98,6 +98,12 @@ impl ScriptProvider {
     }
 
     #[inline]
+    pub fn get(id: usize) -> Option<ScriptFile> {
+        let lookup = SCRIPT_LOOKUP.get()?;
+        lookup.get(&id).cloned()
+    }
+    
+    #[inline]
     pub fn get_by_trigger(trigger: ServerTriggerTypes, type_id: i32, category: i32) -> Option<ScriptFile> {
         Self::ensure_initialized();
         let lookup = SCRIPT_LOOKUP.get()?;
