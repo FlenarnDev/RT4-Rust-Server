@@ -436,6 +436,7 @@ dependencies = [
  "constants",
  "criterion",
  "env_logger",
+ "fnv",
  "lazy_static",
  "log",
  "num-bigint",

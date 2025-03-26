@@ -39,7 +39,7 @@ pub struct ScriptFile {
     pub string_local_count: i32,
     pub int_arg_count: i32,
     pub string_arg_count: i32,
-    pub switch_tables: Vec<SwitchTable>,
+    pub switch_tables: Vec<Option<SwitchTable>>,
     pub opcodes: Vec<ScriptOpcode>,
     pub int_operands: Vec<i32>,
     pub string_operands: Vec<String>,
@@ -135,7 +135,7 @@ impl ScriptFile {
                 table.insert(key, Some(offset));
             }
             
-            script.switch_tables.push(table);
+            script.switch_tables.push(Some(table));
         }
         
         packet.position = 0;

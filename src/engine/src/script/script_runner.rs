@@ -18,6 +18,8 @@ pub type CommandHandlers = HashMap<i32, CommandHandler>;
 
 pub struct ScriptRunner;
 
+pub const OP_LIMIT: i32 = 500_000;
+
 impl ScriptRunner {
     pub fn get_handlers() -> &'static CommandHandlers {
         static HANDLERS: OnceLock<CommandHandlers> = OnceLock::new();
@@ -57,19 +59,19 @@ impl ScriptRunner {
                 match &state.self_entity {
                     Some(EntityType::Player(player)) => {
                         state.active_player = Some(player.clone());
-                        state.pointers |= 1 << (ScriptPointer::ActivePlayer as usize);
+                        state.pointer_add(ScriptPointer::ActivePlayer);
                     },
                     Some(EntityType::NPC(npc)) => {
                         state.active_npc = Some(npc.clone());
-                        state.pointers |= 1 << (ScriptPointer::ActiveNpc as usize);
+                        state.pointer_add(ScriptPointer::ActiveNpc);
                     },
                     Some(EntityType::Loc(loc)) => {
                         state.active_loc = Some(loc.clone());
-                        state.pointers |= 1 << (ScriptPointer::ActiveLoc as usize);
+                        state.pointer_add(ScriptPointer::ActiveLoc);
                     },
                     Some(EntityType::Obj(obj)) => {
                         state.active_obj = Some(obj.clone());
-                        state.pointers |= 1 << (ScriptPointer::ActiveObj as usize);
+                        state.pointer_add(ScriptPointer::ActiveObj);
                     },
                     _ => {}
                 }
@@ -90,37 +92,37 @@ impl ScriptRunner {
                     EntityType::Player(player) => {
                         if has_same_type {
                             state.active_player2 = Some(player.clone());
-                            state.pointers |= 1 << (ScriptPointer::ActivePlayer2 as usize);
+                            state.pointer_add(ScriptPointer::ActivePlayer2);
                         } else {
                             state.active_player = Some(player.clone());
-                            state.pointers |= 1 << (ScriptPointer::ActivePlayer as usize);
+                            state.pointer_add(ScriptPointer::ActivePlayer);
                         }
                     },
                     EntityType::NPC(npc) => {
                         if has_same_type {
                             state.active_npc2 = Some(npc.clone());
-                            state.pointers |= 1 << (ScriptPointer::ActiveNpc2 as usize);
+                            state.pointer_add(ScriptPointer::ActiveNpc2);
                         } else {
                             state.active_npc = Some(npc.clone());
-                            state.pointers |= 1 << (ScriptPointer::ActiveNpc as usize);
+                            state.pointer_add(ScriptPointer::ActiveNpc);
                         }
                     },
                     EntityType::Loc(loc) => {
                         if has_same_type {
                             state.active_loc2 = Some(loc.clone());
-                            state.pointers |= 1 << (ScriptPointer::ActiveLoc2 as usize);
+                            state.pointer_add(ScriptPointer::ActiveLoc2);
                         } else {
                             state.active_loc = Some(loc.clone());
-                            state.pointers |= 1 << (ScriptPointer::ActiveLoc as usize);
+                            state.pointer_add(ScriptPointer::ActiveLoc);
                         }
                     },
                     EntityType::Obj(obj) => {
                         if has_same_type {
                             state.active_obj2 = Some(obj.clone());
-                            state.pointers |= 1 << (ScriptPointer::ActiveObj2 as usize);
+                            state.pointer_add(ScriptPointer::ActiveObj2);
                         } else {
                             state.active_obj = Some(obj.clone());
-                            state.pointers |= 1 << (ScriptPointer::ActiveObj as usize);
+                            state.pointer_add(ScriptPointer::ActiveObj);
                         }
                     }
                 }
@@ -150,26 +152,28 @@ impl ScriptRunner {
         let start = if benchmark { Some(Instant::now()) } else { None };
 
         let handlers = Self::get_handlers();
-
+        
         while state.execution == ScriptState::RUNNING {
             state.opcount += 1;
             state.pc += 1;
 
-            let opcodes = &state.script.opcodes;
-            let opcodes_len = opcodes.len() as i32;
-
+            // Get opcodes length and check bounds safely
+            let opcodes_len = state.script.opcodes.len() as i32;
             if state.pc >= opcodes_len {
                 state.execution = ScriptState::FINISHED;
-                return state.execution;
+                break;
             }
 
-            if !benchmark && state.opcount > 500_000 {
+            // Check operation limit
+            if !benchmark && state.opcount > OP_LIMIT {
                 state.execution = ScriptState::ABORTED;
-                return state.execution;
+                break;
             }
 
-            let opcode = opcodes[state.pc as usize] as i32;
+            // Get the current opcode - do it inside the loop to avoid borrowing conflict
+            let opcode = state.script.opcodes[state.pc as usize] as i32;
 
+            // In debug mode, do safe lookups with error handling
             #[cfg(debug_assertions)]
             {
                 if let Some(handler) = handlers.get(&opcode) {
@@ -178,13 +182,13 @@ impl ScriptRunner {
                 } else {
                     error!("Unknown opcode: {}", opcode);
                     state.execution = ScriptState::ABORTED;
-                    return state.execution;
+                    break;
                 }
             }
 
+            // In release mode, use unchecked access for maximum speed
             #[cfg(not(debug_assertions))]
             {
-                // Release build - use unchecked access for maximum speed
                 // SAFETY: All opcodes are validated at compile-time
                 let handler_fn = unsafe { *handlers.get(&opcode).unwrap_unchecked() };
                 handler_fn(state);

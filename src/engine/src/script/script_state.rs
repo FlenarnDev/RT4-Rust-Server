@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use reqwest::header::SERVER;
 use crate::entity::entity_queue_request::ScriptArgument;
 use crate::entity::entity_type::EntityType;
 use crate::entity::loc::Loc;
@@ -70,6 +71,9 @@ impl ScriptState {
         let mut string_locals = Vec::new();
 
         if let Some(arg_list) = args {
+            int_locals.reserve(arg_list.len());
+            string_locals.reserve(arg_list.len());
+            
             for arg in arg_list {
                 match arg {
                     ScriptArgument::Number(num) => int_locals.push(num),
@@ -79,10 +83,11 @@ impl ScriptState {
         }
 
         let arc_script = Arc::new(script);
+        let trigger = ServerTriggerTypes::try_from(arc_script.info.lookup_key & 0xFF).unwrap();
 
         ScriptState {
-            script: arc_script.clone(),
-            trigger: ServerTriggerTypes::try_from(arc_script.info.lookup_key & 0xff).unwrap(),
+            script: arc_script,
+            trigger,
             execution: Self::RUNNING,
             execution_history: Vec::new(),
             pc: -1,
@@ -225,18 +230,26 @@ impl ScriptState {
     pub fn gosub_frame(&mut self, proc: ScriptFile) {
         if self.fp >= self.frames.len() {
             self.frames.push(GosubStackFrame {
-                script: self.script.clone(),
+                script: Arc::clone(&self.script),
                 pc: 0,
                 int_locals: Vec::new(),
                 string_locals: Vec::new(),
             });
         }
+        
+        let mut new_int_locals = Vec::with_capacity(self.int_locals.len());
+        new_int_locals.extend_from_slice(&mut self.int_locals);
+
+        let mut new_string_locals = Vec::with_capacity(self.string_locals.len());
+        for s in &self.string_locals {
+            new_string_locals.push(s.clone());
+        }
 
         self.frames[self.fp] = GosubStackFrame {
-            script: self.script.clone(),
+            script: Arc::clone(&self.script),
             pc: self.pc,
-            int_locals: self.int_locals.clone(),
-            string_locals: self.string_locals.clone(),
+            int_locals: new_int_locals,
+            string_locals: new_string_locals,
         };
 
         self.fp += 1;
@@ -246,13 +259,13 @@ impl ScriptState {
     pub fn goto_frame(&mut self, label: ScriptFile) {
         if self.debug_fp >= self.debug_frames.len() {
             self.debug_frames.push(JumpStackFrame {
-                script: self.script.clone(),
+                script: Arc::clone(&self.script),
                 pc: 0,
             });
         }
 
         self.debug_frames[self.debug_fp] = JumpStackFrame {
-            script: self.script.clone(),
+            script: Arc::clone(&self.script),
             pc: self.pc,
         };
 
@@ -264,14 +277,20 @@ impl ScriptState {
 
     pub fn setup_new_script(&mut self, script: ScriptFile) {
         let arc_script = Arc::new(script);
-        let mut int_locals = vec![0; arc_script.int_local_count as usize];
-        let mut string_locals = vec![String::new(); arc_script.string_local_count as usize];
 
-        for (i, val) in (0..arc_script.int_arg_count).rev().enumerate() {
+        let int_local_count = arc_script.int_local_count as usize;
+        let string_local_count = arc_script.string_local_count as usize;
+        let int_arg_count = arc_script.int_arg_count as usize;
+        let string_arg_count = arc_script.string_arg_count as usize;
+        
+        let mut int_locals = vec![0; int_local_count];
+        let mut string_locals = vec![String::new(); string_local_count];
+
+        for i in (0..int_arg_count).rev() {
             int_locals[i] = self.pop_int();
         }
 
-        for (i, val) in (0..arc_script.string_arg_count).rev().enumerate() {
+        for i in (0..string_arg_count).rev() {
             string_locals[i] = self.pop_string();
         }
 
