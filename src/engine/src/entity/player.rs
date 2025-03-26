@@ -154,7 +154,7 @@ impl Player {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn is_client_connected(&self) -> bool {
         if self.player_type == PlayerType::Headless {
             return false;
