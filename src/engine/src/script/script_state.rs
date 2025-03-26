@@ -187,32 +187,64 @@ impl ScriptState {
         self.int_stack.get(self.isp).copied().unwrap_or(0)
     }
 
+    #[inline(always)]
     pub fn pop_ints(&mut self, amount: usize) -> Vec<i32> {
-        (0..amount).rev().map(|_| self.pop_int()).collect()
+        let mut result = Vec::with_capacity(amount);
+        let start_idx = self.isp.saturating_sub(1);
+        for i in (start_idx.saturating_sub(amount-1)..=start_idx).rev() {
+            if i < self.int_stack.len() {
+                result.push(self.int_stack[i]);
+            }
+        }
+
+        self.isp = self.isp.saturating_sub(amount);
+
+        result
     }
 
+    #[inline(always)]
     pub fn push_int(&mut self, value: i32) {
         if self.isp < self.int_stack.len() {
             self.int_stack[self.isp] = value;
         } else {
+            if self.int_stack.is_empty() {
+                self.int_stack.reserve(32);
+            } else {
+                self.int_stack.reserve(self.int_stack.len());
+            }
             self.int_stack.push(value);
         }
         self.isp += 1;
     }
 
+    #[inline(always)]
     pub fn pop_string(&mut self) -> String {
+        if self.ssp == 0 {
+            return String::new();
+        }
+
         self.ssp -= 1;
-        self.string_stack.get(self.ssp).cloned().unwrap_or_default()
+        if self.ssp < self.string_stack.len() {
+            std::mem::take(&mut self.string_stack[self.ssp])
+        } else {
+            String::new()
+        }
     }
 
     pub fn pop_strings(&mut self, amount: usize) -> Vec<String> {
         (0..amount).rev().map(|_| self.pop_string()).collect()
     }
 
+    #[inline(always)]
     pub fn push_string(&mut self, string: String) {
         if self.ssp < self.string_stack.len() {
             self.string_stack[self.ssp] = string;
         } else {
+            if self.string_stack.is_empty() {
+                self.string_stack.reserve(32);
+            } else {
+                self.string_stack.reserve(self.string_stack.len());
+            }
             self.string_stack.push(string);
         }
         self.ssp += 1;

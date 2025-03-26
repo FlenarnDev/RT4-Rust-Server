@@ -4,8 +4,7 @@ use crate::script::script_state::ScriptState;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 use log::error;
-use rsmod::changeLoc;
-use crate::script::script_file::{ScriptFile, SwitchTable};
+use crate::script::script_file::ScriptFile;
 use crate::script::script_provider::ScriptProvider;
 
 pub fn get_core_ops() -> &'static CommandHandlers {
@@ -38,8 +37,13 @@ pub fn get_core_ops() -> &'static CommandHandlers {
         handlers.insert(
             ScriptOpcode::PUSH_CONSTANT_STRING as i32,
             |state: &mut ScriptState| {
-                let string_operand = state.get_string_operand();
-                state.push_string(string_operand.parse().unwrap());
+                match state.get_string_operand().parse() {
+                    Ok(str_value) => state.push_string(str_value),
+                    Err(e) => {
+                        error!("Failed to parse string operand: {:?}", e);
+                        state.push_string(String::new());
+                    }
+                }
             }
         );
         
