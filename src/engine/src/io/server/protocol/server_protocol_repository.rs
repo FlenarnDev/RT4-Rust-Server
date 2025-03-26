@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use std::any::{Any, TypeId};
+use fnv::FnvHashMap;
 use crate::io::server::codec::if_opensub_encoder::If_OpenSubEncoder;
 use crate::io::server::codec::if_opentop_encoder::If_OpenTopEncoder;
 use crate::io::server::codec::message_encoder::MessageEncoder;
@@ -15,22 +15,21 @@ struct TypedEncoder<T: OutgoingMessage> {
 }
 
 pub struct ServerProtocolRepository {
-    encoders: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
-    protocol_cache: HashMap<TypeId, ServerProtocol>,
+    encoders: FnvHashMap<TypeId, Box<dyn Any + Send + Sync>>,
+    protocol_cache: FnvHashMap<TypeId, ServerProtocol>,
 }
 
 impl ServerProtocolRepository {
     pub fn new() -> Self {
-        let mut repository = ServerProtocolRepository {
-            encoders: HashMap::new(),
-            protocol_cache: HashMap::new(),
-        };
+        Self::builder()
+            .with::<RebuildNormal>(RebuildNormalEncoder::new())
+            .with::<If_OpenTop>(If_OpenTopEncoder::new())
+            .with::<If_OpenSub>(If_OpenSubEncoder::new())
+            .build()
+    }
 
-        repository.bind::<RebuildNormal>(RebuildNormalEncoder::new());
-        repository.bind::<If_OpenTop>(If_OpenTopEncoder::new());
-        repository.bind::<If_OpenSub>(If_OpenSubEncoder::new());
-
-        repository
+    pub fn builder() -> ServerProtocolRepositoryBuilder {
+        ServerProtocolRepositoryBuilder::new()
     }
 
     #[inline]
@@ -47,6 +46,7 @@ impl ServerProtocolRepository {
         let typed_encoder = TypedEncoder {
             encoder: Box::new(encoder),
         };
+
         self.encoders.insert(type_id, Box::new(typed_encoder));
     }
 
@@ -55,13 +55,38 @@ impl ServerProtocolRepository {
         let type_id = TypeId::of::<T>();
 
         self.encoders.get(&type_id)
-            .and_then(|box_any| box_any.downcast_ref::<TypedEncoder<T>>())
+            .and_then(|boxed| boxed.downcast_ref::<TypedEncoder<T>>())
             .map(|typed| typed.encoder.as_ref())
     }
 
     #[inline]
     pub fn get_protocol<T: 'static + OutgoingMessage>(&self, _: &T) -> Option<ServerProtocol> {
-        self.protocol_cache.get(&TypeId::of::<T>()).cloned()
+        let type_id = TypeId::of::<T>();
+        self.protocol_cache.get(&type_id).copied()
+    }
+}
+
+pub struct ServerProtocolRepositoryBuilder {
+    repository: ServerProtocolRepository,
+}
+
+impl ServerProtocolRepositoryBuilder {
+    fn new() -> Self {
+        Self {
+            repository: ServerProtocolRepository {
+                encoders: FnvHashMap::default(),
+                protocol_cache: FnvHashMap::default(),
+            }
+        }
+    }
+
+    pub fn with<T: 'static + OutgoingMessage>(mut self, encoder: impl MessageEncoder<T> + 'static + Send + Sync) -> Self {
+        self.repository.bind(encoder);
+        self
+    }
+
+    pub fn build(self) -> ServerProtocolRepository {
+        self.repository
     }
 }
 

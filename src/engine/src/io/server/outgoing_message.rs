@@ -1,13 +1,12 @@
-use std::fmt::Debug;
 use crate::entity::player::Player;
-use crate::io::server::info_message::InfoMessage;
+use crate::io::packet::Packet;
 use crate::io::server::model::if_opensub::If_OpenSub;
 use crate::io::server::model::if_opentop::If_OpenTop;
 use crate::io::server::model::rebuild_normal::RebuildNormal;
+use crate::io::server::protocol::server_protocol::ServerProtocol;
 use crate::io::server::protocol::server_protocol_priority::ServerProtocolPriority;
 use crate::io::server::protocol::server_protocol_repository::ServerProtocolRepository;
-use crate::io::server::protocol::server_protocol::ServerProtocol;
-use crate::io::packet::Packet;
+use std::fmt::Debug;
 
 pub trait OutgoingMessage: Debug + Send + PartialEq {
     fn priority(&self) -> ServerProtocolPriority;
@@ -16,14 +15,14 @@ pub trait OutgoingMessage: Debug + Send + PartialEq {
 
 macro_rules! define_outgoing_messages {
     (
-        $(($variant:ident, $type:ty)),*
+        $(($variant:ident, $type:ty, $priority:expr)),*
     ) => {
         // Implement OutgoingMessage for each type
         $(
             impl OutgoingMessage for $type {
                 #[inline]
                 fn priority(&self) -> ServerProtocolPriority {
-                    ServerProtocolPriority::IMMEDIATE
+                    $priority
                 }
 
                 #[inline]
@@ -111,8 +110,7 @@ macro_rules! define_outgoing_messages {
 
 // Apply the unified macro to all message types
 define_outgoing_messages!(
-    (RebuildNormal, RebuildNormal),
-    (IfOpenTop, If_OpenTop),
-    (IfOpenSub, If_OpenSub),
-    (InfoMessage, InfoMessage)
+    (RebuildNormal, RebuildNormal, ServerProtocolPriority::IMMEDIATE),
+    (IfOpenTop, If_OpenTop, ServerProtocolPriority::BUFFERED),
+    (IfOpenSub, If_OpenSub, ServerProtocolPriority::BUFFERED)
 );
