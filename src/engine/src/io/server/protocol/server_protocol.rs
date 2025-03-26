@@ -24,6 +24,9 @@ impl ServerProtocol {
     pub const IF_OPENTOP: ServerProtocol = ServerProtocol::new(145, 5);
     pub const IF_OPENSUB: ServerProtocol = ServerProtocol::new(155, 9);
     
+    // Social
+    pub const MESSAGE_GAME: ServerProtocol = ServerProtocol::new(70, -1);
+    
     // Misc.
     pub const LOGOUT: ServerProtocol = ServerProtocol::new(86, 0);
     pub const UPDATE_RUNENERGY: ServerProtocol = ServerProtocol::new(234, 1);

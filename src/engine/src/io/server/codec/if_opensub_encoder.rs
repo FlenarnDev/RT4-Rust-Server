@@ -3,14 +3,14 @@ use crate::io::server::codec::message_encoder::MessageEncoder;
 use crate::io::server::model::if_opensub::If_OpenSub;
 use crate::io::server::protocol::server_protocol::ServerProtocol;
 
-pub struct If_OpenSubEncoder;
+pub struct If_OpenSub_Encoder;
 
-impl If_OpenSubEncoder {
+impl If_OpenSub_Encoder {
     #[inline]
-    pub fn new() -> Self { If_OpenSubEncoder }
+    pub fn new() -> Self { If_OpenSub_Encoder }
 }
 
-impl MessageEncoder<If_OpenSub> for If_OpenSubEncoder {
+impl MessageEncoder<If_OpenSub> for If_OpenSub_Encoder {
     #[inline]
     fn protocol(&self) -> ServerProtocol { ServerProtocol::IF_OPENSUB }
 

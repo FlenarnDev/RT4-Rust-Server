@@ -7,6 +7,7 @@ use crate::io::server::protocol::server_protocol::ServerProtocol;
 use crate::io::server::protocol::server_protocol_priority::ServerProtocolPriority;
 use crate::io::server::protocol::server_protocol_repository::ServerProtocolRepository;
 use std::fmt::Debug;
+use crate::io::server::model::message_game::Message_Game;
 
 pub trait OutgoingMessage: Debug + Send + PartialEq {
     fn priority(&self) -> ServerProtocolPriority;
@@ -111,6 +112,7 @@ macro_rules! define_outgoing_messages {
 // Apply the unified macro to all message types
 define_outgoing_messages!(
     (RebuildNormal, RebuildNormal, ServerProtocolPriority::IMMEDIATE),
+    (MessageGame, Message_Game, ServerProtocolPriority::IMMEDIATE),
     (IfOpenTop, If_OpenTop, ServerProtocolPriority::BUFFERED),
     (IfOpenSub, If_OpenSub, ServerProtocolPriority::BUFFERED)
 );

@@ -1,11 +1,13 @@
 use std::any::{Any, TypeId};
 use fnv::FnvHashMap;
-use crate::io::server::codec::if_opensub_encoder::If_OpenSubEncoder;
-use crate::io::server::codec::if_opentop_encoder::If_OpenTopEncoder;
+use crate::io::server::codec::if_opensub_encoder::If_OpenSub_Encoder;
+use crate::io::server::codec::if_opentop_encoder::If_OpenTop_Encoder;
 use crate::io::server::codec::message_encoder::MessageEncoder;
+use crate::io::server::codec::message_game_encoder::Message_Game_Encoder;
 use crate::io::server::codec::rebuild_normal_encoder::RebuildNormalEncoder;
 use crate::io::server::model::if_opensub::If_OpenSub;
 use crate::io::server::model::if_opentop::If_OpenTop;
+use crate::io::server::model::message_game::Message_Game;
 use crate::io::server::model::rebuild_normal::RebuildNormal;
 use crate::io::server::outgoing_message::OutgoingMessage;
 use crate::io::server::protocol::server_protocol::ServerProtocol;
@@ -23,8 +25,9 @@ impl ServerProtocolRepository {
     pub fn new() -> Self {
         Self::builder()
             .with::<RebuildNormal>(RebuildNormalEncoder::new())
-            .with::<If_OpenTop>(If_OpenTopEncoder::new())
-            .with::<If_OpenSub>(If_OpenSubEncoder::new())
+            .with::<If_OpenTop>(If_OpenTop_Encoder::new())
+            .with::<If_OpenSub>(If_OpenSub_Encoder::new())
+            .with::<Message_Game>(Message_Game_Encoder::new())
             .build()
     }
 

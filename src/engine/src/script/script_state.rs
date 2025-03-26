@@ -73,7 +73,7 @@ impl ScriptState {
         if let Some(arg_list) = args {
             int_locals.reserve(arg_list.len());
             string_locals.reserve(arg_list.len());
-            
+
             for arg in arg_list {
                 match arg {
                     ScriptArgument::Number(num) => int_locals.push(num),
@@ -155,11 +155,11 @@ impl ScriptState {
             .join(", ")
     }
 
-    pub fn get_active_player(&self) -> Result<&Player, String> {
+    pub fn get_active_player(&mut self) -> Result<&mut Player, String> {
         match if self.get_int_operand() == 0 {
-            &self.active_player
+            &mut self.active_player
         } else {
-            &self.active_player2
+            &mut self.active_player2
         } {
             Some(player) => Ok(player),
             None => Err("Player not found".to_string()),
@@ -268,7 +268,7 @@ impl ScriptState {
                 string_locals: Vec::new(),
             });
         }
-        
+
         let mut new_int_locals = Vec::with_capacity(self.int_locals.len());
         new_int_locals.extend_from_slice(&mut self.int_locals);
 
@@ -314,7 +314,7 @@ impl ScriptState {
         let string_local_count = arc_script.string_local_count as usize;
         let int_arg_count = arc_script.int_arg_count as usize;
         let string_arg_count = arc_script.string_arg_count as usize;
-        
+
         let mut int_locals = vec![0; int_local_count];
         let mut string_locals = vec![String::new(); string_local_count];
 

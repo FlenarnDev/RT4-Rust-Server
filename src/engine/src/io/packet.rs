@@ -390,12 +390,14 @@ impl Packet {
         }
     }
 
-    #[inline(always)]
     pub fn g4(&mut self) -> i32 {
         let pos = self.position;
         self.position += 4;
 
-        ((self.data[pos] as i32) << 24) | ((self.data[pos + 1] as i32) << 16) | ((self.data[pos + 2] as i32) << 8) | (self.data[pos + 3] as i32)
+        ((self.data[pos] as i32 & 0xFF) << 24)
+            | ((self.data[pos + 1] as i32 & 0xFF) << 16)
+            | ((self.data[pos + 2] as i32 & 0xFF) << 8)
+            | (self.data[pos + 3] as i32 & 0xFF)
     }
 
     #[inline(always)]
@@ -430,11 +432,11 @@ impl Packet {
     }
 
     #[inline(always)]
-    pub fn g8(&mut self) -> i64 {
-        let high = self.g4() as i64;
-        let low = self.g4() as i64;
+    pub fn g8(&mut self) -> u64 {
+        let high = self.g4() as u32 as u64;
+        let low = self.g4() as u32 as u64;
 
-        (high << 32) + low
+        (high << 32) | low
     }
 
     #[inline(always)]

@@ -1,17 +1,16 @@
-use log::debug;
 use crate::io::packet::Packet;
 use crate::io::server::codec::message_encoder::MessageEncoder;
 use crate::io::server::model::if_opentop::If_OpenTop;
 use crate::io::server::protocol::server_protocol::ServerProtocol;
 
-pub struct If_OpenTopEncoder;
+pub struct If_OpenTop_Encoder;
 
-impl If_OpenTopEncoder {
+impl If_OpenTop_Encoder {
     #[inline]
-    pub fn new() -> Self { If_OpenTopEncoder }
+    pub fn new() -> Self { If_OpenTop_Encoder }
 }
 
-impl MessageEncoder<If_OpenTop> for If_OpenTopEncoder {
+impl MessageEncoder<If_OpenTop> for If_OpenTop_Encoder {
     #[inline]
     fn protocol(&self) -> ServerProtocol { ServerProtocol::IF_OPENTOP }
 
