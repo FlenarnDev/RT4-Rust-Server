@@ -157,11 +157,18 @@ impl Engine {
             self.cycle();
         }
     }
-    
+
     #[rustfmt::skip]
     fn cycle(&mut self) {
+        let mut aggregate_duration = Duration::new(0, 0);
+        let mut min_duration = Duration::new(u64::MAX, 0);
+        let mut max_duration = Duration::new(0, 0);
+        let mut tick_count = 0;
+    
+        let mut next_tick_time = Instant::now();
+
         loop {
-            let start: Instant = Instant::now();
+            let start = Instant::now();
             
             self.process_world();
             self.process_in();
@@ -173,21 +180,52 @@ impl Engine {
             self.process_info();
             self.process_out();
             self.process_cleanup();
-            
-            // Update stats
-            self.cycle_stats[engine_stat::CYCLE] = start.elapsed();
+
+            let elapsed = start.elapsed();
+            self.cycle_stats[engine_stat::CYCLE] = elapsed;
             std::mem::swap(&mut self.cycle_stats, &mut self.last_cycle_stats);
-            
-            info!(
-                "Tick: {} took: {:?}",
-                self.current_tick,
-                self.cycle_stats[engine_stat::CYCLE]
-            );
-            
-            // Cycle the world now
+
+            aggregate_duration += elapsed;
+            min_duration = min_duration.min(elapsed);
+            max_duration = max_duration.max(elapsed);
+            tick_count += 1;
+
+            if self.current_tick % 10 == 9 {
+                let avg_duration = if tick_count > 0 {
+                    aggregate_duration / tick_count as u32
+                } else {
+                    Duration::new(0, 0)
+                };
+
+                info!(
+                    "Ticks: {} to {} | Total: {:?} | Avg: {:?} | Min: {:?} | Max: {:?}",
+                    self.current_tick - tick_count + 1,
+                    self.current_tick + 1,
+                    aggregate_duration,
+                    avg_duration,
+                    min_duration,
+                    max_duration
+                );
+
+                aggregate_duration = Duration::new(0, 0);
+                min_duration = Duration::new(u64::MAX, 0);
+                max_duration = Duration::new(0, 0);
+                tick_count = 0;
+            }
+
             self.current_tick += 1;
 
-            sleep(self.tick_rate.saturating_sub(start.elapsed()));
+            next_tick_time += self.tick_rate;
+        
+            let now = Instant::now();
+            if next_tick_time > now {
+                sleep(next_tick_time - now);
+            } else {
+                next_tick_time = now + self.tick_rate;
+                if next_tick_time < now + self.tick_rate / 2 {
+                    debug!("Server running behind schedule at tick {}", self.current_tick);
+                }
+            }
         }
     }
     
@@ -320,6 +358,14 @@ impl Engine {
     /// Before packets so they immediately load, but after processing so nothing hits them.
     fn process_logins(&mut self) {
         let start: Instant = Instant::now();
+
+        {
+            let shared_players = self.new_players.lock().unwrap();
+            if shared_players.is_empty() {
+                self.cycle_stats[engine_stat::LOGINS] = start.elapsed();
+                return;
+            }
+        }
 
         let player_to_add = {
             let mut shared_players = self.new_players.lock().unwrap();
@@ -576,15 +622,12 @@ impl Engine {
     }
 
     fn get_next_pid(&self, client: Option<&GameClient>) -> Result<usize, &'static str>  {
-        let default = || self.players.next(false, None);
         let client = match client {
             Some(c) => c,
-            None =>  {
-                debug!("no client!");
-                return default()
-            },
+            None => return self.players.next(false, None),
         };
-
+        
+        let default = || self.players.next(false, None);
         let stream = match &client.stream {
             Some(s) => s,
             None => return default(),
