@@ -1,10 +1,15 @@
+use std::collections::HashMap;
 use log::{debug, error};
 use rs2cache::Cache;
 use rs2cache::js5_compression::Js5Compression;
 use rs2cache::js5_index::Js5Index;
-use rs2cache::js5_masterindex::Js5MasterIndex;
-use sha2::digest::typenum::op;
 use crate::io::packet::Packet;
+
+#[derive(Debug)]
+enum ParamValue {
+    String(String),
+    Integer(i32),
+}
 
 pub fn unpack_objs() {
     let cache_path = "../../src/cacheLocal";
@@ -20,9 +25,7 @@ pub fn unpack_objs() {
         for (j, _) in js5_index.groups.get(&(i as u32)).unwrap().files.iter() {
             obj_count += 1;
             debug!("Parsing obj: {}", obj_count);
-            parse_obj(Packet::from(cache.read(19, i as u32, (*j as u16), None).unwrap()));
-            
-
+            parse_obj(Packet::from(cache.read(19, i as u32, *j as u16, None).unwrap()));
         }
     }
     debug!("Parsed: {:?} 'obj' entries.", obj_count);
@@ -64,7 +67,7 @@ fn parse_obj(mut packet: Packet) {
             }
 
             11 => {
-                debug!("stackable: true");
+                //debug!("stackable: true");
             }
 
             12 => {
@@ -72,7 +75,7 @@ fn parse_obj(mut packet: Packet) {
             }
 
             16  => {
-                debug!("members: true");
+                //debug!("members: true");
             }
 
             18 => {
@@ -130,7 +133,7 @@ fn parse_obj(mut packet: Packet) {
             }
 
             65 => {
-                debug!("getradeable: true");
+                //debug!("getradeable: true");
             }
 
             78 => {
@@ -221,10 +224,48 @@ fn parse_obj(mut packet: Packet) {
                 packet.g2();
             }
 
+            249 => {
+                let count = packet.g1() as usize;
+
+                let mut params: HashMap<i32, ParamValue> = HashMap::with_capacity(next_power_of_two(count));
+
+                for _ in 0..count {
+                    let is_string = packet.g1() == 1;
+                    let key = packet.g3();
+
+                    let value = if is_string {
+                        ParamValue::String(packet.gjstr(0))
+                    } else {
+                        ParamValue::Integer(packet.g4())
+                    };
+                    
+                    params.insert(key, value);
+                }
+
+                for (key, value) in params {
+                    match value {
+                        ParamValue::String(s) => debug!("params: {}: String(\"{}\")", key, s),
+                        ParamValue::Integer(i) => debug!("params: {}: Integer({})", key, i),
+                    }
+                }
+
+            }
+
             _ => {
                 panic!("Unknown opcode {:?}", opcode);
-                break;
             }
         }
     }
+}
+
+fn next_power_of_two(n: usize) -> usize {
+    if n == 0 {
+        return 1;
+    }
+
+    let mut power = 1;
+    while power < n {
+        power *= 2;
+    }
+    power
 }
