@@ -226,19 +226,31 @@ impl Packet {
 
     #[inline(always)]
     pub fn pjstr(&mut self, str: &str, terminator: u8) {
-        let bytes = str.as_bytes();
-        let required_len = self.position + bytes.len() + 1;
+        let mut len = 0;
 
-        // Ensure we have enough space
+        for &b in str.as_bytes() {
+            if b != 0 {
+                len += 1;
+            }
+        }
+
+        let required_len = self.position + len + 1;
         if required_len > self.data.len() {
             self.data.resize(required_len, 0);
         }
 
-        // Copy the string bytes
-        self.data[self.position..self.position + bytes.len()].copy_from_slice(bytes);
-        self.data[self.position + bytes.len()] = terminator;
-        self.position = self.position + bytes.len() + 1;
+        let mut idx = self.position;
+        for &b in str.as_bytes() {
+            if b != 0 {
+                self.data[idx] = b;
+                idx += 1;
+            }
+        }
+
+        self.data[idx] = terminator;
+        self.position = idx + 1;
     }
+
 
     #[inline(always)]
     pub fn pjstr2(&mut self, str: &str) {
