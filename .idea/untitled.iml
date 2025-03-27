@@ -16,6 +16,7 @@
       <sourceFolder url="file://$MODULE_DIR$/src/worldlisttemp/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/proxy/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/engine/src/io/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/src/cache/src/cache_unpacker/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/src/jagex/target" />
       <excludeFolder url="file://$MODULE_DIR$/src/js5/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
@@ -29,6 +30,7 @@
       <excludeFolder url="file://$MODULE_DIR$/src/worldlist/target" />
       <excludeFolder url="file://$MODULE_DIR$/src/worldlisttemp/target" />
       <excludeFolder url="file://$MODULE_DIR$/src/proxy/target" />
+      <excludeFolder url="file://$MODULE_DIR$/src/cache/src/cache_unpacker/target" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

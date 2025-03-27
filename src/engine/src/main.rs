@@ -1,4 +1,5 @@
 use engine::engine::Engine;
+use engine::util::cache::obj_unpacker::unpack_objs;
 
 fn main() {
     if std::env::var_os("RUST_LOG").is_none() {
@@ -6,7 +7,9 @@ fn main() {
     }
     env_logger::init();
 
-    Engine::init();
+    unpack_objs();
+    
+    //Engine::init();
 
-    Engine::get().start(true);
+    //Engine::get().start(true);
 }

@@ -8,3 +8,4 @@ mod parse;
 pub mod namemap;
 pub mod symbols;
 pub mod base37;
+pub mod cache;
