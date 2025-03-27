@@ -43,6 +43,7 @@ pub struct Player {
     pub playtime: i32,
     
     pid: usize,
+    pub username: String,
     
     pub origin_coord: CoordGrid,
     
@@ -78,7 +79,7 @@ pub struct Player {
     pub active_script: Option<Box<ScriptState>>,
 }
 impl Player {
-    pub fn new(client: &mut Option<GameClient>, coord: CoordGrid, gender: u8, window_status: WindowStatus, staff_mod_level: i32, pid: usize) -> Player {
+    pub fn new(client: &mut Option<GameClient>, coord: CoordGrid, gender: u8, window_status: WindowStatus, staff_mod_level: i32, pid: usize, username: String) -> Player {
         Player {
             player_type: PlayerType::ClientBound,
             pathing_entity: PathingEntity::new(
@@ -93,6 +94,7 @@ impl Player {
             gender,
             playtime: -1,
             pid,
+            username,
             origin_coord: CoordGrid { coord: 0 },
             staff_mod_level,
             client: GameClient::take_ownership(client),
@@ -131,6 +133,7 @@ impl Player {
             gender,
             playtime: -1,
             pid,
+            username: format!("dummy_{:?}", pid),
             origin_coord: CoordGrid { coord: 0 },
             staff_mod_level: 0,
             client: GameClient::new_dummy(),
@@ -557,7 +560,7 @@ impl Player {
         if !self.is_client_connected() {
             return;
         }
-
+        
         if message.priority() == ServerProtocolPriority::IMMEDIATE {
             message.write_self(self);
         } else {

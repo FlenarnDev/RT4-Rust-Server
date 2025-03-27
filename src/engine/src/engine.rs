@@ -586,7 +586,6 @@ impl Engine {
             );
             
             let username = decode37(rsa_packet_decrypted.g8());
-            debug!("Username: {}", username);
             let password = rsa_packet_decrypted.gjstr(0);
 
             if client.opcode == title_protocol::RECONNECT {
@@ -609,7 +608,8 @@ impl Engine {
                 0, 
                 window_status, 
                 0, 
-                Self::INVALID_PID
+                Self::INVALID_PID,
+                username
             );
 
             let mut players_lock = thread_player.lock().unwrap();
