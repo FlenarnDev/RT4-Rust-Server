@@ -157,23 +157,19 @@ impl ScriptRunner {
             state.opcount += 1;
             state.pc += 1;
 
-            // Get opcodes length and check bounds safely
             let opcodes_len = state.script.opcodes.len() as i32;
             if state.pc >= opcodes_len {
                 state.execution = ScriptState::FINISHED;
                 break;
             }
 
-            // Check operation limit
             if !benchmark && state.opcount > OP_LIMIT {
                 state.execution = ScriptState::ABORTED;
                 break;
             }
 
-            // Get the current opcode - do it inside the loop to avoid borrowing conflict
             let opcode = state.script.opcodes[state.pc as usize] as i32;
 
-            // In debug mode, do safe lookups with error handling
             #[cfg(debug_assertions)]
             {
                 if let Some(handler) = handlers.get(&opcode) {
@@ -186,7 +182,6 @@ impl ScriptRunner {
                 }
             }
 
-            // In release mode, use unchecked access for maximum speed
             #[cfg(not(debug_assertions))]
             {
                 // SAFETY: All opcodes are validated at compile-time
@@ -195,7 +190,6 @@ impl ScriptRunner {
             }
         }
 
-        // Profiling - only if enabled and benchmarking
         #[cfg(feature = "profiling")]
         if let Some(start) = start {
             let elapsed = start.elapsed();
@@ -220,7 +214,7 @@ impl ScriptRunner {
         state.execution
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn execute_opcode(state: &mut ScriptState, opcode: i32) -> Result<(), String> {
         let handlers = Self::get_handlers();
 
