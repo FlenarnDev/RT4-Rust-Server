@@ -4,12 +4,7 @@ use rs2cache::Cache;
 use rs2cache::js5_compression::Js5Compression;
 use rs2cache::js5_index::Js5Index;
 use crate::io::packet::Packet;
-
-#[derive(Debug)]
-enum ParamValue {
-    String(String),
-    Integer(i32),
-}
+use crate::util::cache::param_helper::ParamValue;
 
 pub fn unpack_objs() {
     let cache_path = "../../src/cacheLocal";
@@ -76,10 +71,6 @@ fn parse_obj(mut packet: Packet) {
 
             16  => {
                 //debug!("members: true");
-            }
-
-            18 => {
-                debug!("multistacksize: {}", packet.g2());
             }
 
             23 => {
