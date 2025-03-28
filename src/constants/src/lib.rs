@@ -6,3 +6,5 @@ pub mod proxy;
 pub mod login_out;
 pub mod rsa;
 pub mod window_mode;
+pub mod js5_archive;
+pub mod js5_config_group;
