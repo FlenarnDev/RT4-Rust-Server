@@ -8,9 +8,12 @@ pub trait ConfigType {
     
     fn decode(&mut self, opcode: u8, dat: &mut Packet);
     
-    fn decode_type(&mut self, data: &mut Packet) {
+    fn decode_type(&mut self, data: &mut Packet, opcode_order: &mut Vec<u8>) {
         while data.remaining() > 0 {
             let opcode = data.g1();
+            
+            opcode_order.push(opcode);
+            
             if opcode == 0 {
                 break;
             }

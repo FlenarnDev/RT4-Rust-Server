@@ -117,7 +117,7 @@ impl ScriptFile {
         packet.position = trailer_position;
         
         let mut script = ScriptFile::new(id as i32);
-        let _instructions = packet.g4(); // We don't need to preallocate anything in Rust either, but still need to read it.
+        let _instructions = packet.g4();
         
         script.int_local_count = packet.g2() as i32;
         script.string_local_count = packet.g2() as i32;
@@ -139,8 +139,8 @@ impl ScriptFile {
         }
         
         packet.position = 0;
-        script.info.script_name = packet.gjstr(0);
-        script.info.source_file_path = packet.gjstr(0);
+        script.info.script_name = packet.gjstr();
+        script.info.source_file_path = packet.gjstr();
         script.info.lookup_key = packet.g4();
         
         let parameter_type_count = packet.g1();
@@ -159,7 +159,7 @@ impl ScriptFile {
             let opcode = packet.g2();
             
             if opcode == ScriptOpcode::PUSH_CONSTANT_STRING as u16 {
-                let test = packet.gjstr(0);
+                let test = packet.gjstr();
                 script.string_operands.push(test);
             } else if is_large_operand(opcode as i32) {
                 script.int_operands.push(packet.g4());

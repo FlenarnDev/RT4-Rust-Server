@@ -12,7 +12,6 @@ impl MessageHandler for VerificationHandler {
             player.client.shutdown();
             return false;
         }
-            
         true
     }
 }

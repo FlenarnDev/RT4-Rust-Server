@@ -73,13 +73,13 @@ pub struct Player {
     
     pub last_response: i32,
     pub last_connected: i32,
-    pub verify_id: u32,
+    pub verify_id: u16,
     
     pub protect: bool,  // Whether protected access is available.
     pub active_script: Option<Box<ScriptState>>,
 }
 impl Player {
-    pub fn new(client: &mut Option<GameClient>, coord: CoordGrid, gender: u8, window_status: WindowStatus, staff_mod_level: i32, pid: usize, username: String) -> Player {
+    pub fn new(client: &mut Option<GameClient>, coord: CoordGrid, gender: u8, window_status: WindowStatus, staff_mod_level: i32, pid: usize, verify_id: u16, username: String) -> Player {
         Player {
             player_type: PlayerType::ClientBound,
             pathing_entity: PathingEntity::new(
@@ -112,7 +112,7 @@ impl Player {
             prevent_logout_until: -1,
             last_response: -1,
             last_connected: -1,
-            verify_id: 0,
+            verify_id,
             protect: false,
             active_script: None,
         }
@@ -198,15 +198,15 @@ impl Player {
         self.pathing_entity.set_active(active);
     }
     
-    pub(crate) fn get_verify_id(&self) -> u32 {
+    pub(crate) fn get_verify_id(&self) -> u16 {
         self.verify_id
     }
     
-    pub(crate) fn get_incremented_verify_id(&mut self) -> u32 {
+    pub(crate) fn get_incremented_verify_id(&mut self) -> u16 {
         self.verify_id = self.verify_id +1;
         self.verify_id
     }
-    pub(crate) fn set_verify_id(&mut self, verify_id: u32) {
+    pub(crate) fn set_verify_id(&mut self, verify_id: u16) {
         self.verify_id = verify_id;
     }
     
@@ -298,7 +298,7 @@ impl Player {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn read(&mut self) -> bool {
         if !self.client.has_available(1).unwrap() {
             return false
@@ -415,7 +415,6 @@ impl Player {
         self.initial_login_data();
         self.rebuild_normal(false);
 
-        // Determine window ID once
         let window_id = if self.window_status.window_mode.is_resizeable() { 746 } else { 548 };
 
         // Get verification ID once and reuse
@@ -461,11 +460,9 @@ impl Player {
         let reload_top_z = (origin_z + 5) << 3;
         let reload_bottom_z = (origin_z - 4) << 3;
 
-        // Cache current coordinates
         let current_x = self.coord().x();
         let current_z = self.coord().z();
 
-        // Determine if rebuild is needed
         let needs_rebuild = reconnect ||
             current_x < reload_left_x as u16 ||
             current_z < reload_bottom_z as u16 ||
@@ -473,7 +470,6 @@ impl Player {
             current_z > (reload_top_z - 1) as u16;
 
         if needs_rebuild {
-            // Create the rebuild message directly with cached values
             let rebuild_msg = RebuildNormal::new(
                 CoordGrid::zone(current_x) as i32,
                 CoordGrid::zone(current_z) as i32,
@@ -483,7 +479,6 @@ impl Player {
 
             self.write(rebuild_msg);
 
-            // Update origin coordinate
             self.set_origin_coord(self.get_coord());
         }
     }
@@ -499,17 +494,14 @@ impl Player {
 
         self.last_connected = current_tick;
 
-        // Reset counters
         self.user_limit = 0;
         self.client_limit = 0;
         self.restricted_limit = 0;
 
-        // Cache limit values to avoid repeated access
         let max_user = ClientProtocolCategory::USER_EVENT.limit;
         let max_client = ClientProtocolCategory::CLIENT_EVENT.limit;
         let max_restricted = ClientProtocolCategory::RESTRICTED_EVENT.limit;
 
-        // Process packets until limits are reached or no more data is available
         while self.user_limit < max_user &&
             self.client_limit < max_client &&
             self.restricted_limit < max_restricted {
@@ -526,13 +518,11 @@ impl Player {
         true
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn write_inner(&mut self, message: OutgoingMessageEnum) {
         if !self.is_client_connected() {
             return;
         }
-
-        // Delegate to the message's write_self implementation
         message.write_self(self);
     }
     
@@ -550,12 +540,11 @@ impl Player {
             message.write_self(self);
         }
 
-        // Clear and reuse the vector to avoid reallocation
         messages.clear();
         self.outgoing_messages = messages;
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn write<T: OutgoingMessage + Into<OutgoingMessageEnum>>(&mut self, message: T) {
         if !self.is_client_connected() {
             return;
@@ -568,7 +557,7 @@ impl Player {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn get_server_protocol_repository(&self) -> &'static ServerProtocolRepository {
         &SERVER_PROTOCOL_REPOSITORY
     }

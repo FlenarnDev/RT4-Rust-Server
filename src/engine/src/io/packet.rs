@@ -309,6 +309,7 @@ impl Packet {
             self.position += 1;
             value
         } else {
+            self.position += 1;
             0
         }
     }
@@ -481,23 +482,28 @@ impl Packet {
         }
     }
 
-    /// Reads a string from the internal buffer until a terminator byte is encountered.
     #[inline(always)]
-    pub fn gjstr(&mut self, terminator: u8) -> String {
-        if let Some(end) = self.data[self.position..].iter().position(|&b| b == terminator) {
-            let slice = &self.data[self.position..self.position + end];
-            self.position += end + 1;
+    pub fn gjstr(&mut self) -> String {
+        let start = self.position;
 
-            // SAFETY: we're assuming the bytes up to the terminator are valid UTF-8
-            unsafe { String::from_utf8_unchecked(slice.to_vec()) }
-        } else {
-            // No terminator found, consume rest
-            let slice = &self.data[self.position..];
-            self.position = self.data.len();
-
-            // SAFETY: same assumption
-            unsafe { String::from_utf8_unchecked(slice.to_vec()) }
+        while self.position < self.data.len() && self.data[self.position] != 0 {
+            self.position += 1;
         }
+
+        let end = self.position;
+
+        if self.position < self.data.len() {
+            self.position += 1;
+        }
+
+        let filtered = self.data[start..end]
+            .iter()
+            .copied()
+            .filter(|&b| b != 0);
+        
+        let decoded: String = filtered.map(|b| b as char).collect();
+        
+        decoded
     }
 
     #[inline(always)]

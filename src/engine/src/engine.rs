@@ -537,8 +537,7 @@ impl Engine {
             // Data here is unknown. 
             // Populated through client script opcode [5600]. 
             let bytes1 = client.inbound().g1b();
-
-
+            
             let adverts_suppressed = client.inbound().g1b();
             let client_signed = client.inbound().g1b();
             
@@ -550,7 +549,7 @@ impl Engine {
             let window_status: WindowStatus = WindowStatus::new(window_mode, canvas_width, canvas_height, anti_aliasing_mode);
             
             let uuid = client.inbound().gbytes(24);
-            let site_settings_cookie = client.inbound().gjstr(0);
+            let site_settings_cookie = client.inbound().gjstr();
             let affiliate_id = client.inbound().g4();
             let detail_options = client.inbound().g4();
             let verify_id = client.inbound().g2();
@@ -586,7 +585,7 @@ impl Engine {
             );
             
             let username = decode37(rsa_packet_decrypted.g8());
-            let password = rsa_packet_decrypted.gjstr(0);
+            let password = rsa_packet_decrypted.gjstr();
 
             if client.opcode == title_protocol::RECONNECT {
                 client.outbound.p1(login_out::RECONNECT_OK);
@@ -609,6 +608,7 @@ impl Engine {
                 window_status, 
                 0, 
                 Self::INVALID_PID,
+                verify_id,
                 username
             );
 
