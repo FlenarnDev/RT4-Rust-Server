@@ -15,7 +15,8 @@ pub fn get_player_ops() -> &'static CommandHandlers {
         handlers.insert(
             ScriptOpcode::MES as i32,
             |state: &mut ScriptState| {
-                let player = Engine::get().players.get_mut(state.get_active_player().unwrap().get_pid()).unwrap();
+                let pid = state.get_active_player().expect("No active player found").get_pid();
+                let player = Engine::get().players.get_mut(pid).expect(format!("No player found for PID: {}", pid).as_str());
                 player.write(Message_Game::new(state.pop_string()));
             }
         );
