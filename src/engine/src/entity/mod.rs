@@ -26,3 +26,4 @@ mod pathing_entity;
 pub mod entity_type;
 mod player_type;
 mod level_experience;
+mod entity_timer;

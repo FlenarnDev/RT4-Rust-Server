@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 use crate::script::script_file::ScriptFile;
+use crate::script::script_state::ScriptState;
 
 pub enum NPCQueueType {
     Normal,
@@ -58,6 +59,42 @@ impl EntityQueueRequest {
                 let mut prev_borrowed = prev_strong.borrow_mut();
                 prev_borrowed.next = self.next.take();
                 
+                if let Some(next_ref) = &prev_borrowed.next {
+                    let mut next_borrowed = next_ref.borrow_mut();
+                    next_borrowed.prev = Some(Weak::clone(&Rc::downgrade(&prev_strong)));
+                }
+            }
+        }
+    }
+}
+
+pub struct EntityQueueState {
+    pub key: u64,
+    pub next: Option<Rc<RefCell<EntityQueueState>>>,
+    pub prev: Option<Weak<RefCell<EntityQueueState>>>,
+    
+    pub script_state: ScriptState,
+    pub delay: i32,
+}
+
+impl EntityQueueState {
+    pub fn new(script_state: ScriptState, delay: i32) -> Self {
+        EntityQueueState {
+            key: 0,
+            next: None,
+            prev: None,
+            
+            script_state,
+            delay
+        }
+    }
+
+    fn unlink(&mut self) {
+        if let Some(prev) = self.prev.take() {
+            if let Some(prev_strong) = prev.upgrade() {
+                let mut prev_borrowed = prev_strong.borrow_mut();
+                prev_borrowed.next = self.next.take();
+
                 if let Some(next_ref) = &prev_borrowed.next {
                     let mut next_borrowed = next_ref.borrow_mut();
                     next_borrowed.prev = Some(Weak::clone(&Rc::downgrade(&prev_strong)));

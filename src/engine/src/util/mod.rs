@@ -10,3 +10,4 @@ pub mod symbols;
 pub mod base37;
 pub mod cache;
 pub mod bits;
+pub mod trig;

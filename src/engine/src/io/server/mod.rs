@@ -1,5 +1,5 @@
 pub mod outgoing_message;
-mod info_message;
+pub mod zone_message;
 pub mod model;
 mod codec;
 pub mod protocol;

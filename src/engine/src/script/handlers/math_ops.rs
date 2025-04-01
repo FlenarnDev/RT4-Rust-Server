@@ -5,6 +5,7 @@ use crate::script::script_opcode::ScriptOpcode;
 use crate::script::script_runner::CommandHandlers;
 use crate::script::script_state::ScriptState;
 use crate::util::bits::{bitcount, clear_bit_range, set_bit_range, MASK};
+use crate::util::trig::Trig;
 
 pub fn get_math_ops() -> &'static CommandHandlers {
     static HANDLERS: OnceLock<CommandHandlers> = OnceLock::new();
@@ -306,6 +307,8 @@ pub fn get_math_ops() -> &'static CommandHandlers {
         handlers.insert(
             ScriptOpcode::SIN_DEG as i32,
             |state: &mut ScriptState| {
+                let value = state.pop_int();
+                //state.push_int(Trig::sin(value));
                 // TODO
             }
         );
@@ -313,6 +316,7 @@ pub fn get_math_ops() -> &'static CommandHandlers {
         handlers.insert(
             ScriptOpcode::COS_DEG as i32,
             |state: &mut ScriptState| {
+                let value = state.pop_int();
                 // TODO
             }
         );
@@ -320,6 +324,7 @@ pub fn get_math_ops() -> &'static CommandHandlers {
         handlers.insert(
             ScriptOpcode::ATAN2_DEG as i32,
             |state: &mut ScriptState| {
+                let value = state.pop_int();
                 // TODO
             }
         );

@@ -10,23 +10,19 @@ pub enum NpcEventType {
 }
 
 pub struct NpcEventRequest {
-    pub r#type: NpcEventType,
+    pub npc_event_type: NpcEventType,
     
-    pub script: Rc<RefCell<ScriptFile>>,
+    pub script: ScriptFile,
     
-    pub npc: Rc<RefCell<NPC>>,
+    pub npc: NPC,
     
     pub linkable: Rc<RefCell<Linkable>>,
 }
 
 impl NpcEventRequest {
-    pub fn new(
-        r#type: NpcEventType,
-        script: Rc<RefCell<ScriptFile>>,
-        npc: Rc<RefCell<NPC>>,
-    ) -> Self {
-        Self {
-            r#type,
+    pub fn new(npc_event_type: NpcEventType, script: ScriptFile, npc: NPC, ) -> Self {
+        NpcEventRequest {
+            npc_event_type,
             script,
             npc, 
             linkable: Rc::new(RefCell::new(Linkable::new())),

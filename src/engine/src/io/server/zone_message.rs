@@ -1,9 +1,9 @@
 #[derive(Debug, Clone, PartialEq)]
-pub struct InfoMessage {}
+pub struct ZoneMessage {}
 
-impl InfoMessage {
+impl ZoneMessage {
     pub fn new() -> Self {
-        InfoMessage {}
+        ZoneMessage {}
     }
     
     fn persists(&self) -> bool {
