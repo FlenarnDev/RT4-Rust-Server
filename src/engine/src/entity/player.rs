@@ -11,13 +11,14 @@ use crate::entity::window_status::WindowStatus;
 use crate::grid::coord_grid::CoordGrid;
 use constants::window_mode::window_mode;
 use log::debug;
+use crate::engine::CLIENT_PROTOCOL_REPOSITORY;
 use crate::entity::entity_type::EntityType;
 use crate::entity::pathing_entity::PathingEntity;
 use crate::entity::player_type::PlayerType;
 use crate::game_connection::GameClient;
-use crate::io::client::protocol::client_protocol::BY_ID;
-use crate::io::client::protocol::client_protocol_category::ClientProtocolCategory;
-use crate::io::client::protocol::client_protocol_repository::{get_decoder, get_handler, ClientProtocolRepository};
+use crate::io::client::protocol::client_protocol::ClientProtocol;
+use crate::io::client::protocol::client_protocol_category::{ClientProtocolCategory, ClientProtocolCategoryLimit};
+use crate::io::client::protocol::client_protocol_repository::ClientProtocolRepository;
 use crate::io::packet_pool::PacketPool;
 use crate::io::server::model::if_opensub::If_OpenSub;
 use crate::io::server::model::if_opentop::If_OpenTop;
@@ -275,19 +276,6 @@ impl Player {
             } else {
                 self.client.opcode = self.client.inbound.g1();
             }
-
-            let test = ClientProtocolRepository::get_message(/* &ClientProtocolRepository */, /* ClientProtocol */, /* Vec<u8> */)
-            
-            if let Some(packet_type) = &BY_ID.get(self.client.opcode as usize).cloned().flatten() {
-                self.client.waiting = packet_type.length;
-            } else {
-                if cfg!(debug_assertions) {
-                    debug!("Unknown packet type: {}", self.client.opcode);
-                }
-                self.client.opcode = 0;
-                self.client.shutdown();
-                return false;
-            }
         }
 
         if self.client.waiting == -1 {
@@ -310,39 +298,15 @@ impl Player {
 
         self.client.read_packet_with_size(self.client.waiting as usize).unwrap();
 
-        // Get packet type information
-        let packet_type = match &BY_ID[self.client.opcode as usize] {
-            Some(pt) => pt.clone(),
-            None => {
-                self.client.opcode = 0;
-                return false;
-            }
-        };
-
-        // Process the packet with the appropriate decoder
-        let decoder = get_decoder(&packet_type);
-
-        if let Some(decoder) = decoder {
-            let waiting_size = self.client.waiting as usize;
-            let message = decoder.decode_erased(self.client.inbound(), waiting_size);
-
-            let success = if let Some(handler) = get_handler(&packet_type) {
-                handler.handle_erased(&*message, self)
-            } else {
-                if cfg!(debug_assertions) {
-                    debug!("No handler for packet: {:?}", packet_type);
-                }
-                false
-            };
-
-            if success {
-                match message.category() {
-                    ClientProtocolCategory::USER_EVENT => self.user_limit += 1,
-                    ClientProtocolCategory::RESTRICTED_EVENT => self.restricted_limit += 1,
-                    _ => self.client_limit += 1,
-                }
+        unsafe {
+            let message = ClientProtocolRepository::get().get_message(ClientProtocol::try_from(self.client.opcode).unwrap(), self.client.inbound.data.clone());
+            if message.is_some() {
+                let handler = ClientProtocolRepository::get().get_handler(ClientProtocol::try_from(self.client.opcode).unwrap());
+                
+                let success: bool = handler.expect(format!("No handler found for opcode: {}", self.client.opcode).as_str()).handle(message, self);
             }
         }
+        
 
         self.bytes_read += self.client.inbound.position;
 
@@ -463,9 +427,9 @@ impl Player {
         self.client_limit = 0;
         self.restricted_limit = 0;
 
-        let max_user = ClientProtocolCategory::USER_EVENT.limit;
-        let max_client = ClientProtocolCategory::CLIENT_EVENT.limit;
-        let max_restricted = ClientProtocolCategory::RESTRICTED_EVENT.limit;
+        let max_user = ClientProtocolCategoryLimit::USER_EVENT as u8;
+        let max_client = ClientProtocolCategoryLimit::CLIENT_EVENT as u8;
+        let max_restricted = ClientProtocolCategoryLimit::RESTRICTED_EVENT as u8;
 
         while self.user_limit < max_user &&
             self.client_limit < max_client &&

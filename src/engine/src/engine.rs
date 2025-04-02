@@ -18,6 +18,7 @@ use crate::entity::player::Player;
 use crate::entity::window_status::WindowStatus;
 use crate::game_connection::GameClient;
 use crate::grid::coord_grid::CoordGrid;
+use crate::io::client::protocol::client_protocol_repository::ClientProtocolRepository;
 use crate::io::packet::Packet;
 use crate::script::script_provider::ScriptProvider;
 use crate::util::base37::decode37;
@@ -41,6 +42,7 @@ pub struct Engine {
 }
 
 static mut ENGINE: Option<Engine> = None;
+pub static mut CLIENT_PROTOCOL_REPOSITORY: Option<ClientProtocolRepository> = None;
 static INIT: Once = Once::new();
 
 impl Engine {
@@ -57,9 +59,10 @@ impl Engine {
     // We don't need safety, we're smart
     pub fn init() {
         INIT.call_once(|| {
-            info!("Initializing global engine instance.");
+            info!("Initializing global instances.");
             unsafe {
                 ENGINE = Some(Engine::new());
+                CLIENT_PROTOCOL_REPOSITORY = Some(ClientProtocolRepository::new());
             }
         })
     }
