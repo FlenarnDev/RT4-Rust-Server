@@ -7,3 +7,4 @@ pub mod crc;
 mod packet_tests;
 pub mod rsa;
 pub mod isaac;
+pub mod packet_pool;

@@ -1,4 +1,5 @@
 use std::cmp::PartialEq;
+use std::collections::VecDeque;
 use std::error::Error;
 use std::time::Instant;
 use crate::entity::block_walk::BlockWalk;
@@ -16,7 +17,8 @@ use crate::entity::player_type::PlayerType;
 use crate::game_connection::GameClient;
 use crate::io::client::protocol::client_protocol::BY_ID;
 use crate::io::client::protocol::client_protocol_category::ClientProtocolCategory;
-use crate::io::client::protocol::client_protocol_repository::{get_decoder, get_handler};
+use crate::io::client::protocol::client_protocol_repository::{get_decoder, get_handler, ClientProtocolRepository};
+use crate::io::packet_pool::PacketPool;
 use crate::io::server::model::if_opensub::If_OpenSub;
 use crate::io::server::model::if_opentop::If_OpenTop;
 use crate::io::server::model::rebuild_normal::RebuildNormal;
@@ -55,8 +57,6 @@ pub struct Player {
     pub client_limit: u8,
     pub restricted_limit: u8,
 
-    pub outgoing_messages: Vec<OutgoingMessageEnum>,
-
     pub user_path: Vec<i32>,
     pub op_called: bool,
     pub bytes_read: usize,
@@ -77,6 +77,8 @@ pub struct Player {
     
     pub protect: bool,  // Whether protected access is available.
     pub active_script: Option<Box<ScriptState>>,
+    
+    pub write_queue: VecDeque<Vec<u8>>,
 }
 impl Player {
     pub fn new(client: &mut Option<GameClient>, coord: CoordGrid, gender: u8, window_status: WindowStatus, staff_mod_level: i32, pid: usize, verify_id: u16, username: String) -> Player {
@@ -101,7 +103,6 @@ impl Player {
             user_limit: 0,
             client_limit: 0,
             restricted_limit: 0,
-            outgoing_messages: Vec::new(),
             user_path: Vec::new(),
             op_called: false,
             bytes_read: 0,
@@ -115,48 +116,10 @@ impl Player {
             verify_id,
             protect: false,
             active_script: None,
+            write_queue: VecDeque::with_capacity(64),
         }
     }
     
-    pub fn new_dummy(coord: CoordGrid, gender: u8, pid: usize) -> Player {
-        Player {
-            player_type: PlayerType::Headless,
-            pathing_entity: PathingEntity::new(
-              coord,
-              1,
-              1,
-              EntityLifeCycle::FOREVER
-            ),
-            move_restrict: MoveRestrict::Normal,
-            block_walk: BlockWalk::Npc,
-            move_strategy: MoveStrategy::Smart,
-            gender,
-            playtime: -1,
-            pid,
-            username: format!("dummy_{:?}", pid),
-            origin_coord: CoordGrid { coord: 0 },
-            staff_mod_level: 0,
-            client: GameClient::new_dummy(),
-            user_limit: 0,
-            client_limit: 0,
-            restricted_limit: 0,
-            outgoing_messages: Vec::new(),
-            user_path: Vec::new(),
-            op_called: false,
-            bytes_read: 0,
-            window_status: WindowStatus { window_mode: window_mode::NULL, canvas_width: 0, canvas_height: 0, anti_aliasing_mode: 0 },
-            request_logout: false,
-            request_idle_logout: false,
-            logging_out: false,
-            prevent_logout_until: -1,
-            last_response: -1,
-            last_connected: -1,
-            verify_id: 0,
-            protect: false,
-            active_script: None,
-        }
-    }
-
     #[inline(always)]
     pub fn is_client_connected(&self) -> bool {
         if self.player_type == PlayerType::Headless {
@@ -307,12 +270,14 @@ impl Player {
         if self.client.opcode == 0 {
             self.client.read_packet_with_size(1).unwrap();
 
-            if !self.client.decryptor.is_none() {
+            if self.client.decryptor.is_some() {
                 // TODO - ISAAC stuff
             } else {
                 self.client.opcode = self.client.inbound.g1();
             }
 
+            let test = ClientProtocolRepository::get_message(/* &ClientProtocolRepository */, /* ClientProtocol */, /* Vec<u8> */)
+            
             if let Some(packet_type) = &BY_ID.get(self.client.opcode as usize).cloned().flatten() {
                 self.client.waiting = packet_type.length;
             } else {
