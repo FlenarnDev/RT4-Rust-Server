@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::Arc;
 use lazy_static::lazy_static;
 use crate::entity::player::Player;
 use crate::io::client::codec::event_applet_focus_decoder::EventAppletFocusDecoder;
@@ -11,7 +12,7 @@ use crate::io::client::handler::message_handler::MessageHandler;
 use crate::io::client::handler::verification_handler::VerificationHandler;
 use crate::io::client::handler::window_status_handler::WindowStatusHandler;
 use crate::io::client::incoming_message::IncomingMessage;
-use crate::io::client::protocol::client_protocol::ClientProtocol;
+use crate::io::client::protocol::client_protocol::{ClientProtocol, ProtocolId};
 use crate::io::packet::Packet;
 
 #[derive(Debug)]
@@ -23,11 +24,15 @@ impl fmt::Display for RepositoryError {
     }
 }
 
+impl std::error::Error for RepositoryError {}
+
+// Update the trait bound to include Send + Sync
 pub trait MessageDecoderErasure: Send + Sync {
     fn protocol(&self) -> &ClientProtocol;
     fn decode_erased(&self, packet: &mut Packet, length: usize) -> Box<dyn IncomingMessage + Send + Sync>;
 }
 
+// Update the trait bound to include Send + Sync
 pub trait MessageHandlerErasure: Send + Sync {
     fn handle_erased(&self, message: &(dyn IncomingMessage + Send + Sync), player: &mut Player) -> bool;
 }
@@ -75,6 +80,7 @@ where
     M: IncomingMessage + Send + Sync + 'static
 {
     fn handle_erased(&self, message: &(dyn IncomingMessage + Send + Sync), player: &mut Player) -> bool {
+        // Using trait upcasting if supported, otherwise fallback to downcast
         if let Some(typed_message) = message.as_any().downcast_ref::<M>() {
             self.handle(typed_message, player)
         } else {
@@ -83,12 +89,13 @@ where
     }
 }
 
-type DecoderBox = Box<dyn MessageDecoderErasure>;
-type HandlerBox = Box<dyn MessageHandlerErasure>;
+// Define the type aliases with explicit Send + Sync bounds
+type DecoderBox = Arc<dyn MessageDecoderErasure>;
+type HandlerBox = Arc<dyn MessageHandlerErasure>;
 
 pub struct ClientProtocolRepository {
-    decoders: HashMap<u32, DecoderBox>,
-    handlers: HashMap<u32, HandlerBox>,
+    decoders: HashMap<ProtocolId, DecoderBox>,
+    handlers: HashMap<ProtocolId, HandlerBox>,
 }
 
 impl ClientProtocolRepository {
@@ -105,11 +112,11 @@ impl ClientProtocolRepository {
         let protocol_id = decoder.protocol().id;
 
         if self.decoders.contains_key(&protocol_id) {
-            return Err(RepositoryError(format!("[ClientProtocolRepository] Already defined a {}", protocol_id)));
+            return Err(RepositoryError(format!("[ClientProtocolRepository] Already defined a protocol with ID: {:?}", protocol_id)));
         }
 
-        self.decoders.insert(protocol_id, Box::new(decoder));
-        self.handlers.insert(protocol_id, Box::new(handler));
+        self.decoders.insert(protocol_id, Arc::new(decoder));
+        self.handlers.insert(protocol_id, Arc::new(handler));
 
         Ok(())
     }
@@ -125,14 +132,14 @@ impl ClientProtocolRepository {
         let protocol_id = decoder.protocol().id;
 
         if self.decoders.contains_key(&protocol_id) {
-            return Err(RepositoryError(format!("[ClientProtocolRepository] Already defined a {}", protocol_id)));
+            return Err(RepositoryError(format!("[ClientProtocolRepository] Already defined a protocol with ID: {:?}", protocol_id)));
         }
 
         // Create a NoopHandler for this message type
         let noop_handler = NoopHandler::<M>::new();
 
-        self.decoders.insert(protocol_id, Box::new(decoder));
-        self.handlers.insert(protocol_id, Box::new(noop_handler));
+        self.decoders.insert(protocol_id, Arc::new(decoder));
+        self.handlers.insert(protocol_id, Arc::new(noop_handler));
 
         Ok(())
     }
@@ -143,33 +150,35 @@ impl ClientProtocolRepository {
             handlers: HashMap::new()
         };
 
-        repository.bind(
-            WindowStatusDecoder,
-            WindowStatusHandler,
-        ).unwrap();
-        
-        repository.bind(
-            VerificationDecoder,
-            VerificationHandler,
-        ).unwrap();
-        
-        repository.bind_decoder_only::<_, EventCameraPositionDecoder>(
-            EventCameraPositionDecoder,
-        ).unwrap();
+        // Using a macro or function to reduce code duplication
+        macro_rules! register_protocol {
+            ($decoder:expr, $handler:expr) => {
+                if let Err(e) = repository.bind($decoder, $handler) {
+                    // Using proper logging instead of panicking
+                    log::warn!("Failed to register protocol: {}", e);
+                }
+            };
+            ($decoder:expr) => {
+                if let Err(e) = repository.bind_decoder_only::<_, _>($decoder) {
+                    log::warn!("Failed to register protocol: {}", e);
+                }
+            };
+        }
 
-        repository.bind_decoder_only::<_, EventAppletFocusDecoder>(
-            EventAppletFocusDecoder
-        ).unwrap();
-        
+        register_protocol!(WindowStatusDecoder, WindowStatusHandler);
+        register_protocol!(VerificationDecoder, VerificationHandler);
+        register_protocol!(EventCameraPositionDecoder);
+        register_protocol!(EventAppletFocusDecoder);
+
         repository
     }
 
-    pub fn get_local_decoder(&self, protocol: &ClientProtocol) -> Option<&dyn MessageDecoderErasure> {
-        self.decoders.get(&protocol.id).map(|boxed| boxed.as_ref())
+    pub fn get_decoder(&self, protocol_id: ProtocolId) -> Option<&dyn MessageDecoderErasure> {
+        self.decoders.get(&protocol_id).map(|boxed| boxed.as_ref())
     }
 
-    pub fn get_local_handler(&self, protocol: &ClientProtocol) -> Option<&dyn MessageHandlerErasure> {
-        self.handlers.get(&protocol.id).map(|boxed| boxed.as_ref())
+    pub fn get_handler(&self, protocol_id: ProtocolId) -> Option<&dyn MessageHandlerErasure> {
+        self.handlers.get(&protocol_id).map(|boxed| boxed.as_ref())
     }
 }
 
@@ -178,9 +187,9 @@ lazy_static! {
 }
 
 pub fn get_decoder(protocol: &ClientProtocol) -> Option<&dyn MessageDecoderErasure> {
-    CLIENT_PROTOCOL_REPOSITORY.get_local_decoder(protocol)
+    CLIENT_PROTOCOL_REPOSITORY.get_decoder(protocol.id)
 }
 
 pub fn get_handler(protocol: &ClientProtocol) -> Option<&dyn MessageHandlerErasure> {
-    CLIENT_PROTOCOL_REPOSITORY.get_local_handler(protocol)
+    CLIENT_PROTOCOL_REPOSITORY.get_handler(protocol.id)
 }

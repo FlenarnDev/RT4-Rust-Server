@@ -9,12 +9,12 @@ use crate::entity::move_strategy::MoveStrategy;
 use crate::entity::window_status::WindowStatus;
 use crate::grid::coord_grid::CoordGrid;
 use constants::window_mode::window_mode;
-use log::debug;
+use log::{debug, error, trace};
 use crate::entity::entity_type::EntityType;
 use crate::entity::pathing_entity::PathingEntity;
 use crate::entity::player_type::PlayerType;
 use crate::game_connection::GameClient;
-use crate::io::client::protocol::client_protocol::BY_ID;
+use crate::io::client::protocol::client_protocol::get_protocol_by_id;
 use crate::io::client::protocol::client_protocol_category::ClientProtocolCategory;
 use crate::io::client::protocol::client_protocol_repository::{get_decoder, get_handler};
 use crate::io::server::model::if_opensub::If_OpenSub;
@@ -298,23 +298,41 @@ impl Player {
         }
     }
 
+    const MAX_PACKET_SIZE: i32 = 20000;
+
     #[inline(always)]
     fn read(&mut self) -> bool {
-        if !self.client.has_available(1).unwrap() {
-            return false
+        // Early return with proper error handling for insufficient data
+        if !self.client.has_available(1).unwrap_or_else(|e| {
+            debug!("Error checking available data: {}", e);
+            false
+        }) {
+            return false;
         }
 
-        if self.client.opcode == 0 {
-            self.client.read_packet_with_size(1).unwrap();
+        // Store the retrieved protocol to avoid duplicate lookups
+        let mut protocol = None;
 
-            if !self.client.decryptor.is_none() {
+        // Read opcode if needed
+        if self.client.opcode == 0 {
+            // Read the packet opcode
+            if let Err(e) = self.client.read_packet_with_size(1) {
+                error!("Error reading packet opcode: {}", e);
+                self.client.shutdown();
+                return false;
+            }
+
+            if self.client.decryptor.is_some() {
                 // TODO - ISAAC stuff
             } else {
                 self.client.opcode = self.client.inbound.g1();
             }
 
-            if let Some(packet_type) = &BY_ID.get(self.client.opcode as usize).cloned().flatten() {
-                self.client.waiting = packet_type.length;
+            // Get packet type using lookup - store the result to avoid duplicate lookups later
+            protocol = get_protocol_by_id(self.client.opcode as u32);
+
+            if let Some(pt) = &protocol {
+                self.client.waiting = pt.length;
             } else {
                 if cfg!(debug_assertions) {
                     debug!("Unknown packet type: {}", self.client.opcode);
@@ -325,63 +343,85 @@ impl Player {
             }
         }
 
+        // Handle variable-length packets
         if self.client.waiting == -1 {
-            self.client.read_packet_with_size(1).unwrap();
+            if let Err(e) = self.client.read_packet_with_size(1) {
+                error!("Error reading packet size (byte): {}", e);
+                return false;
+            }
             self.client.waiting = self.client.inbound.g1() as i32;
         } else if self.client.waiting == -2 {
-            self.client.read_packet_with_size(2).unwrap();
+            if let Err(e) = self.client.read_packet_with_size(2) {
+                error!("Error reading packet size (short): {}", e);
+                return false;
+            }
             self.client.waiting = self.client.inbound.g2() as i32;
 
-            // Avoid processing potentially malicious packets
-            if self.client.waiting > 20000 {
+            // Security check - reject overly large packets
+            if self.client.waiting > Self::MAX_PACKET_SIZE {
+                debug!("Rejecting oversized packet of {} bytes", self.client.waiting);
                 self.client.shutdown();
                 return false;
             }
         }
 
-        if !self.client.has_available(self.client.waiting as usize).unwrap() {
+        // Check if we have enough data for full packet
+        if !self.client.has_available(self.client.waiting as usize).unwrap_or(false) {
+            trace!("Waiting for more data ({} bytes needed)", self.client.waiting);
             return false;
         }
 
-        self.client.read_packet_with_size(self.client.waiting as usize).unwrap();
+        // Read the full packet
+        if let Err(e) = self.client.read_packet_with_size(self.client.waiting as usize) {
+            error!("Error reading packet body: {}", e);
+            self.client.opcode = 0;
+            return false;
+        }
 
-        // Get packet type information
-        let packet_type = match &BY_ID[self.client.opcode as usize] {
-            Some(pt) => pt.clone(),
-            None => {
-                self.client.opcode = 0;
-                return false;
+        // Use the cached protocol if we have it, otherwise look it up again 
+        // (this should only happen if we're continuing a packet read from a previous call)
+        let packet_type = if let Some(pt) = protocol {
+            pt
+        } else {
+            match get_protocol_by_id(self.client.opcode as u32) {
+                Some(pt) => pt,
+                None => {
+                    debug!("Packet type disappeared? Opcode: {}", self.client.opcode);
+                    self.client.opcode = 0;
+                    return false;
+                }
             }
         };
 
         // Process the packet with the appropriate decoder
-        let decoder = get_decoder(&packet_type);
-
-        if let Some(decoder) = decoder {
+        let mut processed = false;
+        if let Some(decoder) = get_decoder(packet_type) {
             let waiting_size = self.client.waiting as usize;
             let message = decoder.decode_erased(self.client.inbound(), waiting_size);
 
-            let success = if let Some(handler) = get_handler(&packet_type) {
-                handler.handle_erased(&*message, self)
+            // Process with handler if available
+            if let Some(handler) = get_handler(packet_type) {
+                processed = handler.handle_erased(&*message, self);
+
+                // Track message statistics by category
+                if processed {
+                    match message.category() {
+                        ClientProtocolCategory::USER_EVENT => self.user_limit += 1,
+                        ClientProtocolCategory::RESTRICTED_EVENT => self.restricted_limit += 1,
+                        _ => self.client_limit += 1,
+                    }
+                }
             } else {
                 if cfg!(debug_assertions) {
                     debug!("No handler for packet: {:?}", packet_type);
                 }
-                false
-            };
-
-            if success {
-                match message.category() {
-                    ClientProtocolCategory::USER_EVENT => self.user_limit += 1,
-                    ClientProtocolCategory::RESTRICTED_EVENT => self.restricted_limit += 1,
-                    _ => self.client_limit += 1,
-                }
             }
         }
 
+        // Update read statistics and reset for next packet
         self.bytes_read += self.client.inbound.position;
-
         self.client.opcode = 0;
+
         true
     }
 

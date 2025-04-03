@@ -4,6 +4,6 @@ use crate::io::client::protocol::client_protocol_category::ClientProtocolCategor
 pub trait IncomingMessage: Any + Send + Sync {
     
     fn category(&self) -> ClientProtocolCategory;
-    
+
     fn as_any(&self) -> &dyn Any;
 }

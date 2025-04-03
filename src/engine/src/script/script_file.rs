@@ -110,7 +110,7 @@ impl ScriptFile {
         let trailer_length = packet.g2() as usize;
         let trailer_position = length - trailer_length - 12 - 2;
         
-        if trailer_position < 0 || trailer_position >= length {
+        if trailer_position == 0 || trailer_position >= length {
             error!("Invalid script file (trailer position).");
         }
         
