@@ -1,15 +1,9 @@
-#[derive(Clone)]
-pub struct IncomingMessage {
-    pub id: i32,
-    pub length: i32,
-}
+use std::any::Any;
+use crate::io::client::protocol::client_protocol_category::ClientProtocolCategory;
 
-impl IncomingMessage {
-    #[inline]
-    pub fn new(id: i32, length: i32) -> IncomingMessage {
-        IncomingMessage {
-            id,
-            length,
-        }    
-    }
+pub trait IncomingMessage: Any + Send + Sync {
+    
+    fn category(&self) -> ClientProtocolCategory;
+    
+    fn as_any(&self) -> &dyn Any;
 }

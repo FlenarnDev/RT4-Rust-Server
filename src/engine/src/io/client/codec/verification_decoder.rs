@@ -1,16 +1,19 @@
 use crate::io::client::codec::message_decoder::MessageDecoder;
-use crate::io::client::model::verification::Verification;
+use crate::io::client::model::verification::VerificationMessage;
 use crate::io::client::protocol::client_protocol::ClientProtocol;
 use crate::io::packet::Packet;
 
-impl MessageDecoder<Verification> for Verification {
-    fn length() -> i32 {
-        4
+pub struct VerificationDecoder;
+
+impl MessageDecoder for VerificationDecoder {
+    type Message = VerificationMessage;
+
+    fn protocol(&self) -> &ClientProtocol {
+        &ClientProtocol::VERIFICATION
     }
 
-    fn decode(_: ClientProtocol, mut packet: Packet) -> Verification {
-        Verification::new(
-            packet.g4()
-        )
+    fn decode(&self, packet: &mut Packet, _length: usize) -> Box<Self::Message> {
+        let verification = packet.g4();
+        Box::new(VerificationMessage{verification})
     }
 }

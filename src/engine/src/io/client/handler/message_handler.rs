@@ -1,8 +1,7 @@
 use crate::entity::player::Player;
-use crate::io::client::protocol::client_protocol_category::ClientProtocolCategory;
+use crate::io::client::incoming_message::IncomingMessage;
 
-pub trait MessageHandler<T> {
-    fn category(&self) -> ClientProtocolCategory;
-    
-    fn handle(&self, message: T, player: &mut Player) -> bool;
+pub trait MessageHandler: Send + Sync {
+    type Message: IncomingMessage + Send + Sync;
+    fn handle(&self, message: &Self::Message, player: &mut Player) -> bool;
 }

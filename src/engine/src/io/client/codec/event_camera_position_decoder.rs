@@ -1,18 +1,20 @@
 use crate::io::client::codec::message_decoder::MessageDecoder;
-use crate::io::client::model::event_camera_position::EventCameraPosition;
+use crate::io::client::model::event_camera_position::EventCameraPositionMessage;
 use crate::io::client::protocol::client_protocol::ClientProtocol;
 use crate::io::packet::Packet;
 
-impl MessageDecoder<EventCameraPosition> for EventCameraPosition {
-    #[inline]
-    fn length() -> i32 {
-        4
+pub struct EventCameraPositionDecoder;
+
+impl MessageDecoder for EventCameraPositionDecoder {
+    type Message = EventCameraPositionMessage;
+
+    fn protocol(&self) -> &ClientProtocol {
+        &ClientProtocol::EVENT_CAMERA_POSITION
     }
 
-    fn decode(_: ClientProtocol, mut packet: Packet) -> EventCameraPosition {
-        EventCameraPosition::new(
-            packet.g2add(),
-            packet.ig2()
-        )
+    fn decode(&self, packet: &mut Packet, _length: usize) -> Box<Self::Message> {
+        let camera_pitch = packet.g2add();
+        let camera_yaw = packet.ig2();
+        Box::new(EventCameraPositionMessage{camera_pitch, camera_yaw})
     }
 }
