@@ -19,6 +19,8 @@ impl ClientProtocol {
     pub const VERIFICATION: Self = ClientProtocol { id: ProtocolId(20), length: 4 };
     pub const WINDOW_STATUS: Self = ClientProtocol { id: ProtocolId(243), length: 6 };
     pub const TRANSMITVAR_VERIFYID: Self = ClientProtocol { id: ProtocolId(177), length: 2 };
+    
+    pub const LOC_ACTION_EXAMINE: Self = ClientProtocol { id: ProtocolId(94), length: 2 };
 }
 
 lazy_static! {

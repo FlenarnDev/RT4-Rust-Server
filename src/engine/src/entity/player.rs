@@ -19,6 +19,7 @@ use crate::io::client::protocol::client_protocol_category::ClientProtocolCategor
 use crate::io::client::protocol::client_protocol_repository::{get_decoder, get_handler};
 use crate::io::server::model::if_opensub::If_OpenSub;
 use crate::io::server::model::if_opentop::If_OpenTop;
+use crate::io::server::model::logout::Logout;
 use crate::io::server::model::rebuild_normal::RebuildNormal;
 use crate::io::server::outgoing_message::{OutgoingMessage, OutgoingMessageEnum};
 use crate::io::server::protocol::server_protocol_priority::ServerProtocolPriority;
@@ -600,5 +601,9 @@ impl Player {
     #[inline(always)]
     pub fn get_server_protocol_repository(&self) -> &'static ServerProtocolRepository {
         &SERVER_PROTOCOL_REPOSITORY
+    }
+    
+    pub fn logout(&mut self) {
+        self.write(Logout::new());
     }
 }

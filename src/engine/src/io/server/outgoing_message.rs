@@ -7,6 +7,7 @@ use crate::io::server::protocol::server_protocol::ServerProtocol;
 use crate::io::server::protocol::server_protocol_priority::ServerProtocolPriority;
 use crate::io::server::protocol::server_protocol_repository::ServerProtocolRepository;
 use std::fmt::Debug;
+use crate::io::server::model::logout::Logout;
 use crate::io::server::model::message_game::Message_Game;
 
 pub trait OutgoingMessage: Debug + Send + PartialEq {
@@ -114,5 +115,6 @@ define_outgoing_messages!(
     (RebuildNormal, RebuildNormal, ServerProtocolPriority::IMMEDIATE),
     (MessageGame, Message_Game, ServerProtocolPriority::IMMEDIATE),
     (IfOpenTop, If_OpenTop, ServerProtocolPriority::BUFFERED),
-    (IfOpenSub, If_OpenSub, ServerProtocolPriority::BUFFERED)
+    (IfOpenSub, If_OpenSub, ServerProtocolPriority::BUFFERED),
+    (Logout, Logout, ServerProtocolPriority::IMMEDIATE)
 );

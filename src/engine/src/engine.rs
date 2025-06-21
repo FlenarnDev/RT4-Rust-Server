@@ -321,14 +321,14 @@ impl Engine {
         self.players.for_each_mut(|player| {
             let mut force: bool = false;
 
-            if self.current_tick - player.last_response >= Self::TIMEOUT_NO_RESPONSE {
+            if (self.current_tick - player.initial_connect_tick) - player.last_response >= Self::TIMEOUT_NO_RESPONSE {
                 // X-logged / timed out for 60s: force logout.
-                debug!("X-logged");
+                debug!("X-logged on tick: {}, player last response: {}", self.current_tick, player.last_response);
                 player.logging_out = true;
                 force = true;
-            } else if self.current_tick - player.last_connected >= Self::TIMEOUT_NO_CONNECTION {
+            } else if (self.current_tick - player.initial_connect_tick) - player.last_connected >= Self::TIMEOUT_NO_CONNECTION {
                 // Connection lost for 30s: request idle logout.
-                debug!("idle log");
+                debug!("Idle log on tick: {}, player last connected: {}", self.current_tick, player.last_connected);
                 player.request_idle_logout = true;
             }
 
@@ -395,7 +395,7 @@ impl Engine {
                     self.players.set(pid, player).expect("Failed to set player!");
 
                     if let Some(player_ref) = self.players.get_mut(pid) {
-                        player_ref.on_login();
+                        player_ref.on_login(self.current_tick);
                     }
                 },
                 Err(_err) => {
@@ -428,12 +428,9 @@ impl Engine {
     /// Convert npc movements
     ///
     /// Compute npc info
-    fn process_info(&self) {
+    fn process_info(&mut self) {
+        let start: Instant = Instant::now();
         // TODO - add benchmark value for this?
-        //for (_, player) in &self.players {
-            //let _: Player = player.borrow().player;
-            // TODO
-       // }
         // TODO
     }
     
@@ -487,6 +484,15 @@ impl Engine {
         // Reset inventories
         // TODO
         self.cycle_stats[engine_stat::CLEANUP] = start.elapsed();
+    }
+
+    fn process_shutdown(&mut self) {
+        self.players.for_each_mut(|player| {
+            if player.is_client_connected() {
+                player.logout();
+                player.client.shutdown();
+            }
+        });
     }
 
     #[inline]
