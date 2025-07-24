@@ -208,17 +208,16 @@ impl ConfigType for ObjType {
             }
             
             30 | 31 | 32 | 33 | 34 => {
-                self.op.insert((opcode - 30) as usize, packet.gjstr())
+                self.op.insert((opcode - 30) as usize, packet.gjstr());
             }
             
             35 | 36 | 37 | 38 | 39 => {
-                self.iop.insert((opcode - 35) as usize, packet.gjstr())
+                self.iop.insert((opcode - 35) as usize, packet.gjstr());
             }
             
             40 => {
                 let count = packet.g1();
-                
-                
+                 
                 for i in 0..count {
                     self.recol_s.insert(i as usize, packet.g2());
                     self.recol_d.insert(i as usize, packet.g2());
@@ -353,8 +352,12 @@ impl ConfigType for ObjType {
             249 => {
                 self.params = decode_params(packet);
             }
+
+            250 => {
+                self.debugname = Some(packet.gjstr());
+            }
             _ => { 
-                error!("Unknown opcode: {}", opcode);
+                error!("Unknown 'obj' opcode: {}", opcode);
             }
         }
     }
@@ -362,13 +365,22 @@ impl ConfigType for ObjType {
 
 pub fn write_obj(file: &mut File, obj: &mut ObjType, opcode_order: &mut Vec<u8>) {
     let mut buffer: Vec<String> = Vec::new();
-
-    // TODO - check for debug name
-    buffer.push(format!("[obj_{}]", obj.id));
+    
+    if obj.debugname.is_some() {
+        buffer.push(obj.debugname.clone().unwrap().to_string());   
+    } else {
+        buffer.push(format!("[obj_{}]", obj.id));    
+    }
 
     // Name always written first if it exists.
     if let Some(name) = &obj.name {
         buffer.push(format!("name={}", name));
+    }
+
+    // Examines aren't stored in cache after 377, so position can't be verified
+    // Writes out after 'name' if field is populated, writes out blank entry.
+    if obj.name.is_some() {
+        buffer.push("desc=HIDDEN".to_string());
     }
 
     let mut model_index: Option<usize> = None;
@@ -386,8 +398,9 @@ pub fn write_obj(file: &mut File, obj: &mut ObjType, opcode_order: &mut Vec<u8>)
 
             1 => {
                 let model_line = format!("model=model_{}_obj", obj.model);
-                model_index = Some(buffer.len()); // Save the index
-                buffer.push(model_line);            }
+                model_index = Some(buffer.len()); // Save the index for later use.
+                buffer.push(model_line);            
+            }
 
             2 => { /* Written separately. */ }
 
@@ -419,8 +432,8 @@ pub fn write_obj(file: &mut File, obj: &mut ObjType, opcode_order: &mut Vec<u8>)
                 if obj.op[(opcode - 30) as usize] != "" {
                     buffer.push(format!(
                         "op{}={}",
-                        opcode - 30,
-                        obj.iop[(opcode - 30) as usize]
+                        opcode - 29,
+                        obj.op[(opcode - 30) as usize]
                     ))
                 }
             }
@@ -429,7 +442,7 @@ pub fn write_obj(file: &mut File, obj: &mut ObjType, opcode_order: &mut Vec<u8>)
                 if obj.iop[(opcode - 35) as usize] != "" {
                     buffer.push(format!(
                         "iop{}={}",
-                        opcode - 35,
+                        opcode - 34,
                         obj.iop[(opcode - 35) as usize]
                     ))
                 }
