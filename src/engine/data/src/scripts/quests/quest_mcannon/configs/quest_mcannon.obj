@@ -119,6 +119,7 @@ stockmarket=yes
 
 [cannon_barrels]
 name=Cannon barrels
+desc=The barrels of the multicannon.
 model=model_2361_obj
 2dyof=-3
 2yanof=1872
@@ -144,7 +145,7 @@ stockmarket=yes
 
 [mcannon_railing]
 name=Railing
-desec=A metal railing replacement.
+desc=A metal railing replacement.
 model=model_4877_obj
 members=yes
 stackable=yes
