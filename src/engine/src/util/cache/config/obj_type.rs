@@ -493,6 +493,7 @@ pub fn write_obj(file: &mut File, obj: &mut ObjType, opcode_order: &mut Vec<u8>)
                 for i in 0..recol_palette_count {
                     recol_palette_lines.push(format!("recol_pal{}d={}", i + 1, obj.recol_d_palette[i]));
                 }
+                
                 let insert_index = index.unwrap() + 1;
                 let recol_palette_len = recol_palette_lines.len();
 
